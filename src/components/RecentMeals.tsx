@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { Meal } from '../storage/Meals';
+import { Meal } from '@/storage/Meals';
 import MealItem from './MealItem';
 
 type RecentMealsProps = {

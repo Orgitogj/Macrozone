@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Share, TouchableOpacity } from 'react-native';
-import { Meal } from '../storage/Meals';
-import { colors } from '../styles/global';
+import { Meal } from '@/storage/Meals';
+import { colors } from '@/styles/global';
 
 type ShareButtonProps = {
   meals: Meal[];

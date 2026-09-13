@@ -1,21 +1,20 @@
-import HomeHeader from '@/src/components/HomeHeader';
-import MacroGrid from '@/src/components/MacroGrid';
-import RecentMeals from '@/src/components/RecentMeals';
-import { getMeals, Meal } from '@/src/storage/Meals';
-import { globalStyles } from '../../styles/global';
+import CopyButton from '@/components/CopyButton';
+import HomeHeader from '@/components/HomeHeader';
+import MacroGrid from '@/components/MacroGrid';
+import RecentMeals from '@/components/RecentMeals';
+import ShareButton from '@/components/SharedButton';
+import { getMeals, Meal } from '@/storage/Meals';
+import { globalStyles } from '@/styles/global';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ScrollView, Text,View } from 'react-native';
-import ShareButton from '@/src/components/SharedButton';
-import CopyButton from '@/src/components/CopyButton';
-import ReminderToggle from '../../components/ReminderToggle';
+import { ScrollView, Text, View } from 'react-native';
+
 export default function HomeScreen() {
   const [meals, setMeals] = useState<Meal[]>([]);
 
   const loadMeals = async () => {
     const data = await getMeals();
     setMeals(data);
-    console.log('Loaded meals:', data);
   };
 
   useFocusEffect(
@@ -27,13 +26,13 @@ export default function HomeScreen() {
   return (
     <ScrollView style={globalStyles.container}>
       <View style={globalStyles.header}>
-  <Text style={globalStyles.title}>MacroZone</Text>
-  <ShareButton meals={meals} />
-</View>
+        <Text style={globalStyles.title}>MacroZone</Text>
+        <ShareButton meals={meals} />
+      </View>
       <HomeHeader />
- <MacroGrid meals={meals} />
-<CopyButton meals={meals} />
-<RecentMeals meals={meals} onDelete={loadMeals} />
+      <MacroGrid meals={meals} />
+      <CopyButton meals={meals} />
+      <RecentMeals meals={meals} onDelete={loadMeals} />
     </ScrollView>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { addMeal } from '@/src/storage/Meals';
+import { addMeal } from '@/storage/Meals';
 import { router } from 'expo-router';
 import {
   StyleSheet,
@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { colors, globalStyles } from '../../styles/global';
+import { colors, globalStyles } from '@/styles/global';
 import * as Haptics from 'expo-haptics';
 
 export default function AddMealScreen() {

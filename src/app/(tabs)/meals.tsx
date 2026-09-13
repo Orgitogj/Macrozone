@@ -1,6 +1,6 @@
-import MealItem from '../../components/MealItem';
-import { clearAllMeals, getMeals, Meal } from '../../storage/Meals';
-import { globalStyles } from '../../styles/global';
+import MealItem from '@/components/MealItem';
+import { clearAllMeals, getMeals, Meal } from '@/storage/Meals';
+import { globalStyles } from '@/styles/global';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
