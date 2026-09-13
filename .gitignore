@@ -36,7 +36,8 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-app-example
+# editor local history (VS Code Local History extension)
+.history/
 
 # generated native folders
 /ios
