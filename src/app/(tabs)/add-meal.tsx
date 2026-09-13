@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { addMeal } from '@/storage/Meals';
+import { addMeal, MealStorageError } from '@/features/meals';
 import { router } from 'expo-router';
 import {
   StyleSheet,
@@ -25,13 +25,24 @@ export default function AddMealScreen() {
       return;
     }
 
-    await addMeal({
-      name,
-      calories: Number(calories),
-      protein: Number(protein) || 0,
-      carbs: Number(carbs) || 0,
-      fat: Number(fat) || 0,
-    });
+    let meal;
+    try {
+      meal = await addMeal({
+        name,
+        calories: Number(calories),
+        protein: Number(protein) || 0,
+        carbs: Number(carbs) || 0,
+        fat: Number(fat) || 0,
+      });
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        error instanceof MealStorageError
+          ? error.message
+          : 'Could not save the meal. Please try again.',
+      );
+      return;
+    }
 
     setName('');
     setCalories('');
@@ -41,7 +52,7 @@ export default function AddMealScreen() {
 
     Alert.alert('Success', 'Meal added successfully!');
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.push('/');
+    router.push({ pathname: '/', params: { date: meal.date } });
   };
 
   return (

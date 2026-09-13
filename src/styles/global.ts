@@ -4,11 +4,18 @@ export const colors = {
   background: '#1a1a2e',
   header: '#242444',
   surface: '#2a2a4a',
+  card: '#16213e',
   primary: '#4fc3f7',
   text: '#ffffff',
   textSecondary: '#a0a0b0',
   alert: '#ff5252',
+  macroCalories: '#ff6b6b',
+  macroProtein: '#4ecdc4',
+  macroCarbs: '#ffd93d',
+  macroFat: '#6bcb77',
 };
+
+export const MIN_TOUCH_TARGET = 44;
 
 export const globalStyles = StyleSheet.create({
   container: {
