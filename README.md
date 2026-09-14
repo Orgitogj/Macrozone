@@ -14,11 +14,16 @@ The app is currently an early MVP. All data stays on the device.
   - The calculator asks for units, the sex used by the formula (female, male, or not specified), age, height, weight, activity level, and a goal (lose, maintain, or gain) with a weekly rate.
   - Before saving, it shows BMR, TDEE, the calorie target, macros, and an explanation of the formulas.
   - Everything is presented as an estimate, not medical advice.
-- **Nutrition Goals:** open from the Home header at any time to review current targets and saved details, recalculate them, or edit them manually.
-- **Home (daily view):** move to the previous or next day, or jump back to today. Future dates are not selectable.
-  - Calorie, protein, carb, and fat totals for the selected day are shown against your goals, with progress bars and "left" or "over" amounts. All of this has text equivalents for screen readers.
-  - The day's meals follow, ordered by time eaten. "Clear Day" deletes the selected day's meals after confirmation.
+- **Navigation:** three tabs (Home, Add, Diary). The tab bar hides while the keyboard is open.
+- **Nutrition Goals and appearance:** open from the options button in the Home header to review targets and saved details, recalculate them, edit them manually, or choose the theme.
+- **Home (daily dashboard):** move to the previous or next day, or jump back to today. Future dates are not selectable.
+  - A calorie card shows calories eaten against the estimated target, with a progress bar and one status: "left", "Target reached", or "over". Protein, carbs, and fat follow as compact progress cards. Every card has a text equivalent for screen readers, and status is never shown by color alone.
+  - Meals are grouped into Breakfast, Lunch, Dinner, and Snacks, each with its calorie subtotal and an "Add" button that opens the meal form preset to that meal type and the selected date. Empty sections show a short hint instead of a large empty state.
+  - "Clear Day" deletes the selected day's meals after confirmation.
   - Users who already have meals but have not set goals see a dismissible "Personalize your goals" suggestion.
+  - Copy and Share are secondary actions at the bottom of the day.
+  - If refreshing fails after data has loaded, the data stays visible with a warning and a "Try again" button.
+- **Themes:** System (default), Light, or Dark, chosen on the Nutrition Goals screen and remembered on the device. System follows the device setting and falls back to dark when the device does not report one. The status bar, navigation bars, tab bar, iOS picker sheet, web inputs, and the root background follow the active theme.
 - **Add Meal:** log a meal with a name, meal type (breakfast, lunch, dinner, snack), date (today or earlier), an optional time, calories, and optional protein, carbs, and fat.
   - The date is chosen with a native date picker (future dates are blocked) or with the previous/next-day and Today controls. The optional time uses a native time picker and can be cleared.
   - On Android the pickers open as system dialogs. On iOS they open in a bottom sheet with Cancel and Done. On web they use the browser's date and time inputs. Saving is disabled while a picker is open.
@@ -27,7 +32,7 @@ The app is currently an early MVP. All data stays on the device.
   - After saving, Home opens on the meal's date without adding duplicate navigation history.
 - **Meal details:** tap a meal to edit any field (including moving it to another meal type or date), duplicate it into a new meal dated today, or delete it.
 - **Deleting:** every meal row has a visible delete button. Long-pressing a row and the screen-reader "Delete" action are shortcuts. Every deletion asks for confirmation.
-- **All Meals (history):** every logged meal, grouped by local date (newest first) with daily calorie totals, in a virtualized list. "Delete All" removes the entire history after a separate confirmation.
+- **Diary (history):** every logged meal, grouped by local date (newest first) with daily calorie totals and meal counts, in a virtualized list. Each day has its own "Clear Day" action. "Delete all history" is a low-emphasis action at the end of the list and asks for a separate confirmation.
 - **Copy / Share summary:** copy or share a plain-text summary of the selected day, including consumed, goal, and remaining or exceeded values for each macro.
 - **Local persistence:** on Android and iOS, meals are stored in an on-device SQLite database. On first launch after updating, meals saved by earlier versions are copied from AsyncStorage automatically. On web, meals stay in AsyncStorage (browser storage). Everything works offline.
 - **Meal reminders (not reachable in the UI yet):** code exists for daily lunch and dinner notifications, but no screen renders it.
@@ -87,21 +92,23 @@ When adding or updating Expo-related packages, use `npx expo install <package>` 
 ```text
 src/
   app/                        Expo Router routes (thin: they render feature screens)
-    _layout.tsx               Root stack (tabs plus meal detail screens)
-    (tabs)/                   Home, Add Meal, All Meals tabs
+    _layout.tsx               Root stack inside the theme provider (tabs plus detail screens)
+    (tabs)/                   Home (index.tsx), Add (add.tsx), Diary (diary.tsx)
     meal/[id].tsx             Edit meal
-    meal/new.tsx              Duplicate meal (?duplicateOf=<id>)
+    meal/new.tsx              New meal preset from Home (?date=&mealType=) or a duplicate (?duplicateOf=<id>)
     onboarding.tsx            First-run goal setup (shown only while the onboarding gate requires it)
     goals/                    Nutrition Goals overview, calculator (calculate.tsx), manual editor (edit.tsx)
   features/
     meals/
-      components/             Presentational meal UI (form, macro grid, meal rows, history list, copy/share)
+      components/             Presentational meal UI (form, calorie and macro cards, meal-type sections,
+                              meal rows, history list, copy/share actions)
       hooks/                  useMeals, useMeal, useMealForm, useMealNavigation
-      screens/                Home, MealHistory, CreateMeal, EditMeal
+      screens/                Home, MealHistory (Diary), CreateMeal, EditMeal
       services/mealActions.ts Use cases: load, save, submit form, confirm-and-delete meal/day/all
       repositories/           MealRepository interface, SQLite and AsyncStorage implementations,
                               row mapping, legacy AsyncStorage import, getMealRepository(.web).ts
-      utils/                  Pure logic: totals, date filtering/grouping, summaries, record normalization
+      utils/                  Pure logic: totals, date filtering/grouping, meal-type sections, new-meal route
+                              params, summaries, record normalization
       validation/mealForm.ts  Form values, validation rules and messages
       types.ts, constants.ts
       index.ts                Public API of the feature
@@ -115,23 +122,36 @@ src/
       validation/             Manual target validation and warnings
     profile/                  Body profile types, unit conversion, profile form validation
     onboarding/               Onboarding gate (provider and pure decision) and onboarding screen
+    settings/                 Appearance (theme) settings
+  theme/                      Design system: semantic light/dark palettes, spacing, radii, typography,
+                              sizes, theme preference (resolution, storage), AppThemeProvider and hooks
   components/
-    layout/FormScreen.tsx     Scrollable, keyboard-aware form screen
-    ui/                       Shared UI: AppButton, AppTextInput, FormField, SegmentedControl, DateNavigator,
-                              DateTimePickerField (.tsx native, .web.tsx web), IconButton, TextButton,
-                              loading/empty/error states
+    layout/                   Screen (safe areas, max width) and ScrollScreen (scrolling, keyboard-aware)
+    ui/                       Shared UI: AppText, AppCard, AppButton, TextButton, IconButton, AppTextInput,
+                              FormField, SegmentedControl, ChoiceList, DateNavigator, DateTimePickerField
+                              (.tsx native, .web.tsx web), ProgressBar, ScreenHeader, SectionHeader,
+                              KeyValueRow, NoticeCard, StepHeader, loading/empty/error states
     ReminderToggle.tsx        Not yet rendered (reminders phase)
   hooks/                      Cross-feature hooks: useSelectedDate, useTodayDateKey
   storage/database/           SQLite access: SqlDatabase interface, open/prepare, ordered schema migrations
   types/nutrition.ts          Shared nutrition types (MacroTotals)
   utils/                      Pure shared utilities: dates, times, date/time input conversion, number input, formatting, ids,
-                              single-flight guard, serial queue, checksum, route params, confirmation dialog
-  styles/global.ts            Shared colors and base styles
+                              single-flight guard, serial queue, checksum, route params, async loading state,
+                              confirmation dialog
 jest.environment.js           Jest environment: pins/switches timezones, provides in-memory SQLite for tests
 assets/images/                App icon, adaptive icons, splash image, favicon
 ```
 
 Import paths use the `@/` alias, which maps to `src/` (see `tsconfig.json`). For example, `import { HomeScreen } from '@/features/meals'`. Use `./` only for files in the same folder. Route files and other features import a feature through its `index.ts`.
+
+## Design system
+
+- **Semantic colors only.** Components read colors from the active theme (`useTheme()` or `useThemedStyles(createStyles)`). Raw color values exist only in `src/theme/palettes.ts`. Both palettes define the same tokens, such as `background`, `surface`, `textPrimary`, `primary`, `danger`, and one accent per nutrient.
+- **Tokens.** Spacing, radii, border widths, typography variants, icon sizes, touch targets (at least 44 pt), and layout limits live in `src/theme/tokens.ts`.
+- **Contrast.** Primary and secondary text meet WCAG AA (4.5:1) on backgrounds and surfaces in both themes, and accent colors reach at least 3:1. Progress states are always also shown as text.
+- **Text scaling.** Text respects the system font size up to a capped multiplier, and card rows wrap instead of truncating.
+- **Theme preference.** Stored in AsyncStorage under `theme_preference` (`system`, `light`, or `dark`). A missing or invalid value means `system`. The preference is loaded before the first screen renders, so the app does not flash the wrong theme.
+- **Layout.** `Screen` and `ScrollScreen` apply safe-area insets per edge and limit content to a readable width on tablets and web. `ScrollScreen` keeps inputs visible above the keyboard (iOS content insets, Android `KeyboardAvoidingView` with edge-to-edge), and taps on buttons work while the keyboard is open.
 
 ## Local data model
 
@@ -243,9 +263,10 @@ Business logic is implemented as pure functions and unit-tested with Jest (`npm 
 - The legacy AsyncStorage copy of pre-SQLite meals is kept on the device indefinitely. Removing it will be a separate, explicitly confirmed step.
 - Raw legacy records that could not be imported are preserved, but there is no screen to review or recover them yet.
 - On web, meals are stored in AsyncStorage (browser storage), not SQLite. Web writes are serialized within one tab, but separate browser tabs are not coordinated.
-- On Android, the form scrolls, but the keyboard is not otherwise avoided (edge-to-edge keyboard handling is planned with the UX phase).
+- Keyboard handling uses React Native's built-in APIs rather than a dedicated keyboard library, so behavior can differ slightly between Android versions and keyboards.
 - Reminders cannot be reached in the UI, and they cancel *all* scheduled notifications rather than only MacroZone's own.
-- The app uses a dark-only theme and fixed top padding instead of safe areas.
+- The theme preference is stored per device and is not synced.
+- Android date and time dialogs and confirmation alerts are drawn by the system, so they follow the device's light or dark setting rather than an explicit in-app choice.
 - If Home is left open on today past midnight, it moves to the new day the next time the screen gains focus.
 - `npm audit` reports advisories in transitive Expo CLI and build-tooling dependencies. npm's only suggested fix is an Expo major-version upgrade, so these are tracked rather than force-fixed.
 
@@ -258,7 +279,7 @@ Work proceeds one phase at a time:
 2. **Safe meal management:** validated forms, meal types, edit, duplicate, and delete flows, confirmations, accessibility.
 3. **Storage architecture:** SQLite repository layer, versioned schema migrations, safe one-time import from AsyncStorage.
 4. **Personalized goals and onboarding:** BMR/TDEE-based estimates and editable goals.
-5. **Home and diary UX:** design system, light/dark themes, safe areas, a diary grouped by meal type.
+5. **Home and diary UX:** design system, light/dark/system themes, safe areas, keyboard handling, a Home dashboard grouped by meal type, and the Diary.
 6. **Reminders and settings:** configurable, platform-correct notifications.
 7. **Fast logging:** favorites, recent foods, saved meals, recipes, servings.
 8. **Progress tracking:** weight, body measurements, trends, charts.
