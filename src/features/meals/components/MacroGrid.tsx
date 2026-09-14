@@ -1,14 +1,13 @@
 import { StyleSheet, View } from 'react-native';
 
 import { MacroCard } from '@/features/meals/components/MacroCard';
-import type { DailyNutritionGoals } from '@/features/nutrition-goals';
+import type { MacroGoalBreakdown } from '@/features/nutrition-goals/types';
 import { colors } from '@/styles/global';
-import type { MacroKey, MacroTotals } from '@/types/nutrition';
+import type { MacroKey } from '@/types/nutrition';
 import { formatCalories, formatGrams } from '@/utils/format';
 
 type MacroGridProps = {
-  totals: MacroTotals;
-  goals: DailyNutritionGoals;
+  progress: MacroGoalBreakdown;
 };
 
 const MACRO_CARDS: readonly {
@@ -23,17 +22,11 @@ const MACRO_CARDS: readonly {
   { key: 'fat', label: 'Fat', color: colors.macroFat, format: formatGrams },
 ];
 
-export function MacroGrid({ totals, goals }: MacroGridProps) {
+export function MacroGrid({ progress }: MacroGridProps) {
   return (
     <View style={styles.grid}>
       {MACRO_CARDS.map(({ key, label, color, format }) => (
-        <MacroCard
-          key={key}
-          label={label}
-          value={format(totals[key])}
-          goal={format(goals[key])}
-          color={color}
-        />
+        <MacroCard key={key} label={label} progress={progress[key]} format={format} color={color} />
       ))}
     </View>
   );

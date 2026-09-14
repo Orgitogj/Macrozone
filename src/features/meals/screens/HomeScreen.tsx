@@ -1,8 +1,9 @@
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppLoader } from '@/components/ui/AppLoader';
 import { DateNavigator } from '@/components/ui/DateNavigator';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { IconButton } from '@/components/ui/IconButton';
 import { CopySummaryButton } from '@/features/meals/components/CopySummaryButton';
 import { DayMealList } from '@/features/meals/components/DayMealList';
 import { MacroGrid } from '@/features/meals/components/MacroGrid';
@@ -13,14 +14,20 @@ import {
   buildDailySummary,
   formatDailySummaryText,
 } from '@/features/meals/utils/dailySummary';
-import { DEFAULT_DAILY_GOALS } from '@/features/nutrition-goals';
+import {
+  getEffectiveGoals,
+  PersonalizeGoalsCard,
+  shouldOfferGoalPersonalization,
+  useGoalsNavigation,
+  useNutritionPlan,
+} from '@/features/nutrition-goals';
 import { useSelectedDate } from '@/hooks/useSelectedDate';
 import { globalStyles } from '@/styles/global';
 import { formatLongDate, getRelativeDayLabel } from '@/utils/date';
 
 export function HomeScreen() {
-  const { meals, status, errorMessage, retry, requestDeleteMeal, requestClearDay } =
-    useMeals();
+  const { meals, status, errorMessage, retry, requestDeleteMeal, requestClearDay } = useMeals();
+  const nutritionPlan = useNutritionPlan();
   const {
     selectedDateKey,
     todayKey,
@@ -31,12 +38,16 @@ export function HomeScreen() {
     goToToday,
   } = useSelectedDate();
   const navigation = useMealNavigation();
+  const goalsNavigation = useGoalsNavigation();
 
-  const summary = buildDailySummary(meals, selectedDateKey, DEFAULT_DAILY_GOALS);
+  const planState = nutritionPlan.state;
+  const plan = planState.status === 'ready' ? planState.plan : null;
+  const summary = buildDailySummary(meals, selectedDateKey, getEffectiveGoals(plan));
   const summaryText = formatDailySummaryText(summary);
   const relativeLabel = getRelativeDayLabel(selectedDateKey, todayKey);
   const longDate = formatLongDate(selectedDateKey, todayKey);
-  const isReady = status === 'ready';
+  const isReady = status === 'ready' && planState.status === 'ready';
+  const isLoading = status === 'loading' || planState.status === 'loading';
 
   return (
     <ScrollView style={globalStyles.container}>
@@ -44,7 +55,15 @@ export function HomeScreen() {
         <Text style={globalStyles.title} accessibilityRole='header'>
           MacroZone
         </Text>
-        <ShareSummaryButton summaryText={summaryText} disabled={!isReady} />
+        <View style={styles.headerActions}>
+          <IconButton
+            icon='options-outline'
+            onPress={goalsNavigation.openGoals}
+            accessibilityLabel='Nutrition goals'
+            accessibilityHint='View or change your daily targets'
+          />
+          <ShareSummaryButton summaryText={summaryText} disabled={!isReady} />
+        </View>
       </View>
 
       <DateNavigator
@@ -56,18 +75,27 @@ export function HomeScreen() {
         onToday={isToday ? undefined : goToToday}
       />
 
-      {status === 'loading' ? <AppLoader accessibilityLabel='Loading meals' /> : null}
-
-      {status === 'error' ? (
-        <ErrorState
-          message={errorMessage ?? 'Could not load your meals.'}
-          onRetry={retry}
-        />
+      {isLoading && status !== 'error' && planState.status !== 'error' ? (
+        <AppLoader accessibilityLabel='Loading meals' />
       ) : null}
 
-      {isReady ? (
+      {status === 'error' ? (
+        <ErrorState message={errorMessage ?? 'Could not load your meals.'} onRetry={retry} />
+      ) : null}
+
+      {status !== 'error' && planState.status === 'error' ? (
+        <ErrorState message={planState.message} onRetry={nutritionPlan.retry} />
+      ) : null}
+
+      {isReady && plan ? (
         <>
-          <MacroGrid totals={summary.totals} goals={summary.goals} />
+          {shouldOfferGoalPersonalization(plan) ? (
+            <PersonalizeGoalsCard
+              onSetUp={goalsNavigation.openCalculator}
+              onDismiss={() => void nutritionPlan.dismissPersonalization()}
+            />
+          ) : null}
+          <MacroGrid progress={summary.goalProgress} />
           <CopySummaryButton summaryText={summaryText} />
           <DayMealList
             meals={summary.meals}
@@ -83,3 +111,11 @@ export function HomeScreen() {
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
+});
