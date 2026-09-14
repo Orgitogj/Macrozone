@@ -1,11 +1,8 @@
 import type { DailyMealSummary, Meal } from '@/features/meals/types';
 import { calculateMacroTotals } from '@/features/meals/utils/macroTotals';
 import { filterMealsByDate } from '@/features/meals/utils/mealDates';
-import {
-  calculateRemainingMacros,
-  type DailyNutritionGoals,
-  type MacroGoalProgress,
-} from '@/features/nutrition-goals';
+import type { DailyNutritionGoals, MacroGoalProgress } from '@/features/nutrition-goals/types';
+import { calculateRemainingMacros } from '@/features/nutrition-goals/utils/remainingMacros';
 import { formatLongDate, type LocalDateKey } from '@/utils/date';
 import { formatCalories, formatGrams } from '@/utils/format';
 

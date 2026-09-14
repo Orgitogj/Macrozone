@@ -2,7 +2,7 @@ import type { MEAL_TYPES } from '@/features/meals/constants';
 import type {
   DailyNutritionGoals,
   MacroGoalBreakdown,
-} from '@/features/nutrition-goals';
+} from '@/features/nutrition-goals/types';
 import type { MacroTotals } from '@/types/nutrition';
 import type { LocalDateKey } from '@/utils/date';
 import type { LocalTime } from '@/utils/time';
