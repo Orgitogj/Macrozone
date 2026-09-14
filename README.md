@@ -21,7 +21,7 @@ The app is currently an early MVP. All data stays on the device.
 - **Deleting:** every meal row has a visible delete button. Long-pressing a row and the screen-reader "Delete" action are shortcuts. Every deletion asks for confirmation.
 - **All Meals (history):** every logged meal, grouped by local date (newest first) with daily calorie totals, in a virtualized list. "Delete All" removes the entire history after a separate confirmation.
 - **Copy / Share summary:** copy or share a plain-text summary of the selected day, including consumed, goal, and remaining or exceeded values for each macro.
-- **Local persistence:** meals are stored on the device with AsyncStorage. Data saved by earlier versions keeps loading.
+- **Local persistence:** on Android and iOS, meals are stored in an on-device SQLite database. On first launch after updating, meals saved by earlier versions are copied from AsyncStorage automatically. On web, meals stay in AsyncStorage (browser storage). Everything works offline.
 - **Meal reminders (not reachable in the UI yet):** code exists for daily lunch and dinner notifications, but no screen renders it.
 
 ## Technology stack
@@ -31,7 +31,7 @@ The app is currently an early MVP. All data stays on the device.
 | Framework     | [Expo SDK 54](https://docs.expo.dev/versions/v54.0.0/), React Native 0.81, React 19.1 |
 | Navigation    | Expo Router 6 (file-based routing, typed routes)                  |
 | Language      | TypeScript 5.9 (`strict`)                                         |
-| Persistence   | `@react-native-async-storage/async-storage`                       |
+| Persistence   | `expo-sqlite` (Android, iOS); `@react-native-async-storage/async-storage` (web meals, legacy data, small preferences) |
 | Device APIs   | `expo-notifications`, `expo-haptics`, `expo-clipboard`, `expo-crypto` |
 | Pickers       | `@react-native-community/datetimepicker` (Android and iOS; web uses HTML inputs) |
 | Tooling       | ESLint 9 (`eslint-config-expo`), Expo Doctor, React Compiler (experimental) |
@@ -43,7 +43,7 @@ The New Architecture is enabled (`newArchEnabled: true`).
 
 Prerequisites:
 
-- Node.js LTS and npm
+- Node.js 22.5 or later (local database tests use Node's built-in `node:sqlite`) and npm
 - The [Expo Go](https://expo.dev/go) app on a device, or an Android emulator / iOS simulator
 
 ```bash
@@ -88,8 +88,9 @@ src/
       components/             Presentational meal UI (form, macro grid, meal rows, history list, copy/share)
       hooks/                  useMeals, useMeal, useMealForm, useMealNavigation
       screens/                Home, MealHistory, CreateMeal, EditMeal
-      services/mealActions.ts Use cases: submit form, confirm-and-delete meal/day/all
-      storage/mealStorage.ts  AsyncStorage access and legacy-data handling
+      services/mealActions.ts Use cases: load, save, submit form, confirm-and-delete meal/day/all
+      repositories/           MealRepository interface, SQLite and AsyncStorage implementations,
+                              row mapping, legacy AsyncStorage import, getMealRepository(.web).ts
       utils/                  Pure logic: totals, date filtering/grouping, summaries, record normalization
       validation/mealForm.ts  Form values, validation rules and messages
       types.ts, constants.ts
@@ -102,44 +103,95 @@ src/
                               loading/empty/error states
     ReminderToggle.tsx        Not yet rendered (reminders phase)
   hooks/                      Cross-feature hooks: useSelectedDate, useTodayDateKey
+  storage/database/           SQLite access: SqlDatabase interface, open/prepare, ordered schema migrations
   types/nutrition.ts          Shared nutrition types (MacroTotals)
   utils/                      Pure shared utilities: dates, times, date/time input conversion, number input, formatting, ids,
-                              single-flight guard, route params, confirmation dialog
+                              single-flight guard, serial queue, checksum, route params, confirmation dialog
   styles/global.ts            Shared colors and base styles
-jest.environment.js           Jest environment that pins and switches timezones
+jest.environment.js           Jest environment: pins/switches timezones, provides in-memory SQLite for tests
 assets/images/                App icon, adaptive icons, splash image, favicon
 ```
 
 Import paths use the `@/` alias, which maps to `src/` (see `tsconfig.json`). For example, `import { HomeScreen } from '@/features/meals'`. Use `./` only for files in the same folder. Route files and other features import a feature through its `index.ts`.
 
-## Dates and data compatibility
+## Local data model
+
+### Dates and meal fields
 
 - **Local calendar days.** Every meal belongs to a local calendar day, stored as a `YYYY-MM-DD` key (`LocalDateKey`) that is computed from the device's local time. Days are never derived from the UTC ISO string, which would put late-evening or early-morning meals on the wrong day.
 - **Selected day in the URL.** Home keeps the selected day in its `date` route parameter (`/?date=2026-09-13`). Missing, invalid, or future values fall back to today.
-- **Meal record fields.** Each meal stores `id` (a UUID v4 from `expo-crypto`'s cryptographically secure generator; if an ID cannot be generated, the save fails and nothing is written), `name`, `calories`, `protein`, `carbs`, `fat`, `mealType`, `date`, an optional `time` (`HH:MM`, local 24-hour), `createdAt`, and `updatedAt`.
-- **Older saved meals keep working.** Meals saved by earlier versions may lack `date`, `mealType`, `time`, or `updatedAt`. When they are read:
-  - `date` is derived from `createdAt` in the device's current timezone;
-  - `mealType` is inferred from the local time of day;
-  - `time` is empty;
-  - `updatedAt` equals `createdAt`;
-  - missing numbers become 0.
+- **Meal fields.** Each meal has:
+  - `id`: a UUID v4 from `expo-crypto`'s cryptographically secure generator. If an ID cannot be generated, the save fails and nothing is written.
+  - `name`, `calories`, `protein`, `carbs`, `fat`.
+  - `mealType`, `date`, and an optional `time` (`HH:MM`, local 24-hour).
+  - `createdAt` and `updatedAt`.
 
-  Nothing is rewritten on read. Older numeric ids keep working.
-- **Edits keep unknown fields.** An edit merges into the stored record, so fields this version does not know about are kept.
-- **Unreadable data is never overwritten.** Stored records that cannot be interpreted are hidden but preserved when meals are added, edited, or deleted. If the stored data is corrupted, the app shows an error instead of replacing it.
+### Persistence architecture
+
+Screens, hooks, and components never touch a database. They use use cases in `features/meals/services`, which depend only on the `MealRepository` interface:
+
+```text
+Screens → hooks/services → MealRepository → SQLite (Android, iOS) | AsyncStorage (web)
+```
+
+`getMealRepository()` is split into `getMealRepository.ts` (SQLite) and `getMealRepository.web.ts` (AsyncStorage), so web bundles never include SQLite. `expo-sqlite` web support is still in alpha and needs special hosting headers.
+
+### SQLite schema (`macrozone.db`, schema version 1)
+
+| Table | Purpose | Key columns and constraints |
+| ----- | ------- | --------------------------- |
+| `meals` | Logged meals | `id TEXT PRIMARY KEY`, `name`, `calories`/`protein`/`carbs`/`fat REAL` (must be numeric), `meal_type` (breakfast, lunch, dinner, snack), `local_date` (`YYYY-MM-DD`), `local_time` (`HH:MM` or null), `created_at`, `updated_at`, `extra_json` (valid JSON or null) |
+| `app_metadata` | App-level markers such as the legacy-import record | `key TEXT PRIMARY KEY`, `value` (valid JSON), `updated_at` |
+| `legacy_meal_records` | Raw legacy records that could not be imported as meals, kept for recovery | `source_index`, `raw_json`, `reason` (`unreadable`, `duplicate_id`, `conflict`, `unparseable_source`), `imported_at` |
+
+Indexes: `(local_date, local_time, created_at)`, `(local_date, meal_type)`, and `(created_at)`.
+
+### Schema migrations
+
+- Schema versions are tracked with `PRAGMA user_version`. Migrations are an ordered, consecutively numbered list in `src/storage/database/schemaMigrations.ts`.
+- Each migration runs in an exclusive transaction together with its version bump. A failed migration rolls back completely and leaves the previous version in place.
+- A database created by a newer app version is refused rather than modified.
+- Future data (goals, favorites, measurements, reminders) will be added as new numbered migrations in the phases that introduce those features.
+
+### Migration from AsyncStorage
+
+On Android and iOS, the first repository access opens the database, applies schema migrations, and then imports the legacy AsyncStorage `meals` array once:
+
+1. **Already imported?** If `app_metadata` already contains `legacy_async_storage_meals_import`, nothing happens.
+2. **Read without changing anything.** The legacy value is only read. It is never modified or deleted, so AsyncStorage remains a full pre-migration backup.
+3. **Classify each record:**
+   - Records that can be read become rows in `meals`, keeping their original ID (numeric IDs become text). Dates and meal types are calculated once and stored, so they no longer shift with timezone changes. Fields the app doesn't recognize are kept in `extra_json`.
+   - Records that cannot be read, and repeated IDs, are copied as raw JSON into `legacy_meal_records`.
+   - If the whole value cannot be parsed, the raw text is kept there too.
+4. **Never overwrite.** Rows are inserted with `ON CONFLICT(id) DO NOTHING`. If a row with the same ID already exists with different content, it is not overwritten, and the incoming record is saved as a `conflict`.
+5. **One transaction.** All rows, raw records, and the completion marker (with counts and a checksum of the source) are written in a single exclusive transaction. If anything fails, nothing is written, no marker is recorded, and the import is retried on the next access. The app shows an error with a retry option.
+
+Running the import again is safe: the marker is checked before and inside the transaction, and inserts ignore existing IDs.
+
+### Concurrency and recovery
+
+- **No lost updates.** Writes change individual rows instead of rewriting the whole list.
+- **One write at a time.** All repository writes, on both SQLite and AsyncStorage, go through a serial queue.
+- **Exclusive transactions.** Multi-statement work (updates, delete-all, migrations, import) runs in exclusive transactions.
+- **One setup per launch.** Database setup is cached, so concurrent screens trigger a single migration and import. A failed setup is retried on the next call.
+- **Delete All** removes all rows from `meals` only. Migration-recovery records in `legacy_meal_records` and the legacy AsyncStorage backup are kept; no ordinary meal deletion (single meal, Clear Day, or Delete All) removes them.
+- **Reverting to an older build.** An app version from before this change would read the untouched AsyncStorage snapshot, which does not include meals added afterwards.
 
 ## Testing
 
 Business logic is implemented as pure functions and unit-tested with Jest (`npm test`).
 
 - **Tests stay local.** Test files live next to the code in `__tests__/` folders, with shared helpers in `src/testing/`. Both paths are in `.gitignore`, so tests are not committed. The Jest configuration (`package.json` and `jest.environment.js`) is committed, and `npm test` passes when no tests are present.
+- **Database tests use real SQLite.** `jest.environment.js` exposes an in-memory database from Node's built-in `node:sqlite` (Node 22.5 or later), adapted to the same `SqlDatabase` interface the app uses. This lets repository, migration, and import tests run real SQL, including constraints and transaction rollbacks, without a device.
 - **Date tests are deterministic.** `jest.environment.js` runs every test file in UTC, whatever the machine timezone. Tests can switch to other timezones through the environment's `__setTestTimeZone` hook, for example to cover UTC+14, UTC−10, and DST changes. Setting `process.env.TZ` inside a test has no effect, because Jest sandboxes `process.env`.
 
 ## Current limitations
 
 - Nutrition goals are fixed defaults (2,000 kcal / 150 g protein / 250 g carbs / 65 g fat).
 - There are no serving sizes yet (planned together with recipes).
-- Storage has no schema versioning and no protection against concurrent writes from separate processes. Older meals' dates are derived when they are read, so they can shift if the device timezone changes, until the storage migration saves them.
+- The legacy AsyncStorage copy of pre-SQLite meals is kept on the device indefinitely. Removing it will be a separate, explicitly confirmed step.
+- Raw legacy records that could not be imported are preserved, but there is no screen to review or recover them yet.
+- On web, meals are stored in AsyncStorage (browser storage), not SQLite. Web writes are serialized within one tab, but separate browser tabs are not coordinated.
 - On Android, the form scrolls, but the keyboard is not otherwise avoided (edge-to-edge keyboard handling is planned with the UX phase).
 - Reminders cannot be reached in the UI, and they cancel *all* scheduled notifications rather than only MacroZone's own.
 - The app uses a dark-only theme and fixed top padding instead of safe areas.
@@ -153,7 +205,7 @@ Work proceeds one phase at a time:
 0. **Repository cleanup and baseline:** tooling, scripts, dependency hygiene, documentation.
 1. **Correct daily tracking:** domain types, local-date utilities, selected-day totals, date navigation, history grouped by date, unit tests.
 2. **Safe meal management:** validated forms, meal types, edit, duplicate, and delete flows, confirmations, accessibility.
-3. **Storage architecture:** repository layer, schema versioning, migrations, evaluation of SQLite.
+3. **Storage architecture:** SQLite repository layer, versioned schema migrations, safe one-time import from AsyncStorage.
 4. **Personalized goals and onboarding:** BMR/TDEE-based estimates and editable goals.
 5. **Home and diary UX:** design system, light/dark themes, safe areas, a diary grouped by meal type.
 6. **Reminders and settings:** configurable, platform-correct notifications.
