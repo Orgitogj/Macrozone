@@ -7,6 +7,7 @@ import { CopySummaryButton } from '@/features/meals/components/CopySummaryButton
 import { DayMealList } from '@/features/meals/components/DayMealList';
 import { MacroGrid } from '@/features/meals/components/MacroGrid';
 import { ShareSummaryButton } from '@/features/meals/components/ShareSummaryButton';
+import { useMealNavigation } from '@/features/meals/hooks/useMealNavigation';
 import { useMeals } from '@/features/meals/hooks/useMeals';
 import {
   buildDailySummary,
@@ -18,7 +19,8 @@ import { globalStyles } from '@/styles/global';
 import { formatLongDate, getRelativeDayLabel } from '@/utils/date';
 
 export function HomeScreen() {
-  const { meals, status, errorMessage, retry, requestDeleteMeal } = useMeals();
+  const { meals, status, errorMessage, retry, requestDeleteMeal, requestClearDay } =
+    useMeals();
   const {
     selectedDateKey,
     todayKey,
@@ -28,6 +30,7 @@ export function HomeScreen() {
     goToNextDay,
     goToToday,
   } = useSelectedDate();
+  const navigation = useMealNavigation();
 
   const summary = buildDailySummary(meals, selectedDateKey, DEFAULT_DAILY_GOALS);
   const summaryText = formatDailySummaryText(summary);
@@ -71,7 +74,9 @@ export function HomeScreen() {
             emptyMessage={
               isToday ? 'No meals logged today.' : 'No meals logged on this day.'
             }
+            onPressMeal={(meal) => navigation.openMeal(meal.id)}
             onRequestDelete={requestDeleteMeal}
+            onClearDay={() => requestClearDay(selectedDateKey, todayKey)}
           />
         </>
       ) : null}

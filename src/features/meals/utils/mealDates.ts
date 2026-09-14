@@ -1,11 +1,22 @@
 import type { Meal, MealDateGroup } from '@/features/meals/types';
 import { calculateMacroTotals } from '@/features/meals/utils/macroTotals';
 import { compareDateKeys, type LocalDateKey } from '@/utils/date';
+import { getLocalMinutesOfDay, localTimeToMinutes } from '@/utils/time';
+
+export function getMealMinutesOfDay(meal: Meal): number {
+  return meal.time === null
+    ? getLocalMinutesOfDay(new Date(meal.createdAt))
+    : localTimeToMinutes(meal.time);
+}
 
 export function compareMealsNewestFirst(a: Meal, b: Meal): number {
-  const byTime = Date.parse(b.createdAt) - Date.parse(a.createdAt);
-  if (byTime !== 0) {
-    return byTime;
+  const byTimeOfDay = getMealMinutesOfDay(b) - getMealMinutesOfDay(a);
+  if (byTimeOfDay !== 0) {
+    return byTimeOfDay;
+  }
+  const byCreatedAt = Date.parse(b.createdAt) - Date.parse(a.createdAt);
+  if (byCreatedAt !== 0) {
+    return byCreatedAt;
   }
   if (a.id === b.id) {
     return 0;

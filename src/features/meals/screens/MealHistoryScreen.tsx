@@ -4,15 +4,23 @@ import { AppLoader } from '@/components/ui/AppLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TextButton } from '@/components/ui/TextButton';
 import { MealHistoryList } from '@/features/meals/components/MealHistoryList';
+import { useMealNavigation } from '@/features/meals/hooks/useMealNavigation';
 import { useMeals } from '@/features/meals/hooks/useMeals';
 import { groupMealsByDate } from '@/features/meals/utils/mealDates';
 import { useTodayDateKey } from '@/hooks/useTodayDateKey';
 import { globalStyles } from '@/styles/global';
 
 export function MealHistoryScreen() {
-  const { meals, status, errorMessage, retry, requestDeleteMeal, clearAll } =
-    useMeals();
+  const {
+    meals,
+    status,
+    errorMessage,
+    retry,
+    requestDeleteMeal,
+    requestDeleteAllHistory,
+  } = useMeals();
   const todayKey = useTodayDateKey();
+  const navigation = useMealNavigation();
 
   return (
     <View style={globalStyles.container}>
@@ -21,11 +29,11 @@ export function MealHistoryScreen() {
           All Meals
         </Text>
         <TextButton
-          label='Clear All'
+          label='Delete All'
           tone='danger'
-          onPress={clearAll}
+          onPress={requestDeleteAllHistory}
           disabled={status !== 'ready' || meals.length === 0}
-          accessibilityHint='Deletes every logged meal'
+          accessibilityHint='Deletes your entire meal history after confirmation'
         />
       </View>
 
@@ -43,6 +51,7 @@ export function MealHistoryScreen() {
           <MealHistoryList
             groups={groupMealsByDate(meals)}
             todayKey={todayKey}
+            onPressMeal={(meal) => navigation.openMeal(meal.id)}
             onRequestDelete={requestDeleteMeal}
           />
         ) : null}

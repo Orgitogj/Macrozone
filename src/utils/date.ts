@@ -48,6 +48,12 @@ export function dateKeyToLocalDate(key: LocalDateKey): Date {
   return createLocalNoon(year, month - 1, day);
 }
 
+export function getEndOfLocalDay(key: LocalDateKey): Date {
+  const date = dateKeyToLocalDate(key);
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
+
 export function addDaysToDateKey(key: LocalDateKey, days: number): LocalDateKey {
   const date = dateKeyToLocalDate(key);
   date.setDate(date.getDate() + days);

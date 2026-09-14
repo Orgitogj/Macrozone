@@ -4,19 +4,17 @@ import { useCallback, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
 import {
-  clearAllMeals,
-  deleteMeal,
-  getMeals,
-  MealStorageError,
-} from '@/features/meals/storage/mealStorage';
+  confirmAndClearDay,
+  confirmAndDeleteAllMeals,
+  confirmAndDeleteMeal,
+  getMealErrorMessage,
+  type DestructiveActionResult,
+} from '@/features/meals/services/mealActions';
+import { getMeals } from '@/features/meals/storage/mealStorage';
 import type { Meal } from '@/features/meals/types';
-import { confirmDestructiveAction } from '@/utils/confirm';
+import type { LocalDateKey } from '@/utils/date';
 
 type LoadStatus = 'loading' | 'ready' | 'error';
-
-function toErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof MealStorageError ? error.message : fallback;
-}
 
 export function useMeals() {
   const [meals, setMeals] = useState<Meal[]>([]);
@@ -39,7 +37,7 @@ export function useMeals() {
       }
       if (requestId === latestRequestId.current) {
         setErrorMessage(
-          toErrorMessage(error, 'Could not load your meals. Please try again.'),
+          getMealErrorMessage(error, 'Could not load your meals. Please try again.'),
         );
         setStatus('error');
       }
@@ -57,38 +55,50 @@ export function useMeals() {
     void reload();
   };
 
-  const requestDeleteMeal = async (meal: Meal) => {
-    const confirmed = await confirmDestructiveAction({
-      title: 'Delete Meal',
-      message: `Are you sure you want to delete "${meal.name}"?`,
-      confirmLabel: 'Delete',
-    });
-    if (!confirmed) {
-      return;
-    }
+  const runDestructiveAction = async (
+    action: () => Promise<DestructiveActionResult>,
+    failureMessage: string,
+  ) => {
     try {
-      await deleteMeal(meal.id);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if ((await action()) === 'completed') {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     } catch (error) {
-      Alert.alert(
-        'Error',
-        toErrorMessage(error, 'Could not delete the meal. Please try again.'),
-      );
+      Alert.alert('Error', getMealErrorMessage(error, failureMessage));
     }
     await reload();
   };
 
-  const clearAll = async () => {
-    try {
-      await clearAllMeals();
-    } catch (error) {
-      Alert.alert(
-        'Error',
-        toErrorMessage(error, 'Could not clear your meals. Please try again.'),
-      );
-    }
-    await reload();
-  };
+  const requestDeleteMeal = (meal: Meal) =>
+    runDestructiveAction(
+      () => confirmAndDeleteMeal(meal),
+      'Could not delete the meal. Please try again.',
+    );
 
-  return { meals, status, errorMessage, retry, requestDeleteMeal, clearAll };
+  const requestClearDay = (dateKey: LocalDateKey, todayKey: LocalDateKey) =>
+    runDestructiveAction(
+      () =>
+        confirmAndClearDay({
+          dateKey,
+          todayKey,
+          mealCount: meals.filter((meal) => meal.date === dateKey).length,
+        }),
+      'Could not clear this day. Please try again.',
+    );
+
+  const requestDeleteAllHistory = () =>
+    runDestructiveAction(
+      () => confirmAndDeleteAllMeals(meals.length),
+      'Could not delete your meal history. Please try again.',
+    );
+
+  return {
+    meals,
+    status,
+    errorMessage,
+    retry,
+    requestDeleteMeal,
+    requestClearDay,
+    requestDeleteAllHistory,
+  };
 }

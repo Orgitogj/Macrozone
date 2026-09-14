@@ -1,12 +1,13 @@
-import type { Meal, NewMealInput } from '@/features/meals/types';
+import type { Meal, MealInput } from '@/features/meals/types';
 import {
   inferMealTypeFromDate,
   isMealType,
 } from '@/features/meals/utils/mealType';
 import { MACRO_KEYS, type MacroTotals } from '@/types/nutrition';
 import { isLocalDateKey, toLocalDateKey } from '@/utils/date';
+import { isLocalTime } from '@/utils/time';
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -19,6 +20,10 @@ function toFiniteNumber(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0;
   }
   return 0;
+}
+
+function isValidTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value));
 }
 
 export function readStoredMealId(value: unknown): string | null {
@@ -41,13 +46,10 @@ export function normalizeStoredMeal(value: unknown): Meal | null {
     return null;
   }
   const { name, createdAt } = value;
-  if (typeof name !== 'string' || typeof createdAt !== 'string') {
+  if (typeof name !== 'string' || !isValidTimestamp(createdAt)) {
     return null;
   }
   const createdAtDate = new Date(createdAt);
-  if (Number.isNaN(createdAtDate.getTime())) {
-    return null;
-  }
 
   const macros = {} as MacroTotals;
   for (const key of MACRO_KEYS) {
@@ -62,7 +64,9 @@ export function normalizeStoredMeal(value: unknown): Meal | null {
       ? value.mealType
       : inferMealTypeFromDate(createdAtDate),
     date: isLocalDateKey(value.date) ? value.date : toLocalDateKey(createdAtDate),
+    time: isLocalTime(value.time) ? value.time : null,
     createdAt,
+    updatedAt: isValidTimestamp(value.updatedAt) ? value.updatedAt : createdAt,
   };
 }
 
@@ -73,19 +77,36 @@ export function normalizeStoredMeals(values: readonly unknown[]): Meal[] {
   });
 }
 
-export function createMeal(
-  input: NewMealInput,
-  { id, now }: { id: string; now: Date },
-): Meal {
+function pickMealInput(input: MealInput): MealInput {
   return {
-    id,
     name: input.name,
     calories: input.calories,
     protein: input.protein,
     carbs: input.carbs,
     fat: input.fat,
-    mealType: inferMealTypeFromDate(now),
-    date: toLocalDateKey(now),
-    createdAt: now.toISOString(),
+    mealType: input.mealType,
+    date: input.date,
+    time: input.time,
+  };
+}
+
+export function createMeal(
+  input: MealInput,
+  { id, now }: { id: string; now: Date },
+): Meal {
+  const timestamp = now.toISOString();
+  return {
+    id,
+    ...pickMealInput(input),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+export function applyMealUpdate(meal: Meal, input: MealInput, now: Date): Meal {
+  return {
+    ...meal,
+    ...pickMealInput(input),
+    updatedAt: now.toISOString(),
   };
 }

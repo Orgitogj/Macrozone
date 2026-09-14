@@ -5,21 +5,22 @@ import type {
 } from '@/features/nutrition-goals';
 import type { MacroTotals } from '@/types/nutrition';
 import type { LocalDateKey } from '@/utils/date';
+import type { LocalTime } from '@/utils/time';
 
 export type MealType = (typeof MEAL_TYPES)[number];
 
-export type Meal = MacroTotals & {
-  id: string;
+export type MealInput = MacroTotals & {
   name: string;
   mealType: MealType;
   date: LocalDateKey;
-  createdAt: string;
+  time: LocalTime | null;
 };
 
-export type NewMealInput = Pick<
-  Meal,
-  'name' | 'calories' | 'protein' | 'carbs' | 'fat'
->;
+export type Meal = MealInput & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type MealDateGroup = {
   dateKey: LocalDateKey;

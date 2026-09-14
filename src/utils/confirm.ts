@@ -1,6 +1,6 @@
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
-type ConfirmDestructiveActionOptions = {
+export type ConfirmDestructiveActionOptions = {
   title: string;
   message: string;
   confirmLabel: string;
@@ -13,6 +13,11 @@ export function confirmDestructiveAction({
   confirmLabel,
   cancelLabel = 'Cancel',
 }: ConfirmDestructiveActionOptions): Promise<boolean> {
+  if (Platform.OS === 'web') {
+    const webConfirm = (globalThis as { confirm?: (text: string) => boolean }).confirm;
+    return Promise.resolve(webConfirm ? webConfirm(`${title}\n\n${message}`) : false);
+  }
+
   return new Promise((resolve) => {
     Alert.alert(
       title,

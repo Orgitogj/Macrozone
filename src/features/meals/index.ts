@@ -1,4 +1,5 @@
+export { CreateMealScreen } from '@/features/meals/screens/CreateMealScreen';
+export { EditMealScreen } from '@/features/meals/screens/EditMealScreen';
 export { HomeScreen } from '@/features/meals/screens/HomeScreen';
 export { MealHistoryScreen } from '@/features/meals/screens/MealHistoryScreen';
-export { addMeal, MealStorageError } from '@/features/meals/storage/mealStorage';
-export type { Meal, MealType, NewMealInput } from '@/features/meals/types';
+export type { Meal, MealInput, MealType } from '@/features/meals/types';

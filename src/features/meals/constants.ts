@@ -21,3 +21,10 @@ export const MEAL_TYPE_HOUR_RANGES: readonly {
 ];
 
 export const FALLBACK_MEAL_TYPE: MealType = 'snack';
+
+export const MEAL_LIMITS = {
+  nameMaxLength: 80,
+  maxCalories: 10000,
+  maxMacroGrams: 1000,
+  maxDecimalPlaces: 2,
+} as const;

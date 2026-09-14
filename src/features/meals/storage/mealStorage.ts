@@ -1,11 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { Meal, NewMealInput } from '@/features/meals/types';
+import type { Meal, MealInput } from '@/features/meals/types';
 import {
+  applyMealUpdate,
   createMeal,
+  isRecord,
+  normalizeStoredMeal,
   normalizeStoredMeals,
   readStoredMealId,
 } from '@/features/meals/utils/mealRecords';
+import type { LocalDateKey } from '@/utils/date';
+import { createId } from '@/utils/id';
 
 export const MEALS_STORAGE_KEY = 'meals';
 
@@ -64,11 +69,43 @@ export async function getMeals(): Promise<Meal[]> {
   return meals;
 }
 
-export async function addMeal(input: NewMealInput): Promise<Meal> {
+export async function getMealById(id: string): Promise<Meal | null> {
   const records = await readStoredRecords();
-  const meal = createMeal(input, { id: Date.now().toString(), now: new Date() });
+  const record = records.find((candidate) => readStoredMealId(candidate) === id);
+  return record === undefined ? null : normalizeStoredMeal(record);
+}
+
+function createMealId(): string {
+  try {
+    return createId();
+  } catch (error) {
+    throw new MealStorageError('Could not create a unique ID for this meal. Please try again.', {
+      cause: error,
+    });
+  }
+}
+
+export async function addMeal(input: MealInput): Promise<Meal> {
+  const id = createMealId();
+  const records = await readStoredRecords();
+  const meal = createMeal(input, { id, now: new Date() });
   await writeStoredRecords([meal, ...records]);
   return meal;
+}
+
+export async function updateMeal(id: string, input: MealInput): Promise<Meal> {
+  const records = await readStoredRecords();
+  const index = records.findIndex((record) => readStoredMealId(record) === id);
+  const current = index === -1 ? null : normalizeStoredMeal(records[index]);
+  if (current === null) {
+    throw new MealStorageError('This meal no longer exists.');
+  }
+  const updated = applyMealUpdate(current, input, new Date());
+  const original = records[index];
+  const nextRecords = [...records];
+  nextRecords[index] = isRecord(original) ? { ...original, ...updated } : updated;
+  await writeStoredRecords(nextRecords);
+  return updated;
 }
 
 export async function deleteMeal(id: string): Promise<void> {
@@ -76,6 +113,18 @@ export async function deleteMeal(id: string): Promise<void> {
   await writeStoredRecords(
     records.filter((record) => readStoredMealId(record) !== id),
   );
+}
+
+export async function deleteMealsForDate(dateKey: LocalDateKey): Promise<number> {
+  const records = await readStoredRecords();
+  const remaining = records.filter(
+    (record) => normalizeStoredMeal(record)?.date !== dateKey,
+  );
+  const deletedCount = records.length - remaining.length;
+  if (deletedCount > 0) {
+    await writeStoredRecords(remaining);
+  }
+  return deletedCount;
 }
 
 export async function clearAllMeals(): Promise<void> {

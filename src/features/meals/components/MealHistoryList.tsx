@@ -24,6 +24,7 @@ type HistorySection = SectionListData<
 type MealHistoryListProps = {
   groups: readonly MealDateGroup[];
   todayKey: LocalDateKey;
+  onPressMeal: (meal: Meal) => void;
   onRequestDelete: (meal: Meal) => void;
   style?: StyleProp<ViewStyle>;
 };
@@ -31,6 +32,7 @@ type MealHistoryListProps = {
 export function MealHistoryList({
   groups,
   todayKey,
+  onPressMeal,
   onRequestDelete,
   style,
 }: MealHistoryListProps) {
@@ -49,7 +51,7 @@ export function MealHistoryList({
       keyExtractor={(meal) => meal.id}
       stickySectionHeadersEnabled={false}
       renderItem={({ item }) => (
-        <MealRow meal={item} onRequestDelete={onRequestDelete} />
+        <MealRow meal={item} onPress={onPressMeal} onRequestDelete={onRequestDelete} />
       )}
       renderSectionHeader={({ section }) => (
         <View
