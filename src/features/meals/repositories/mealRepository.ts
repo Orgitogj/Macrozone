@@ -20,6 +20,7 @@ export class MealRepositoryError extends Error {
 
 export type MealRepository = {
   listMeals(): Promise<Meal[]>;
+  countMeals(): Promise<number>;
   getMealById(id: string): Promise<Meal | null>;
   createMeal(input: MealInput): Promise<Meal>;
   updateMeal(id: string, input: MealInput): Promise<Meal>;

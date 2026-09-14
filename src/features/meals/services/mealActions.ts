@@ -47,6 +47,10 @@ export function loadAllMeals(repository: MealRepository = getMealRepository()): 
   return repository.listMeals();
 }
 
+export function countLoggedMeals(repository: MealRepository = getMealRepository()): Promise<number> {
+  return repository.countMeals();
+}
+
 export function loadMeal(
   id: string,
   repository: MealRepository = getMealRepository(),

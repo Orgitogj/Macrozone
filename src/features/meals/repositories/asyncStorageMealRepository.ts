@@ -84,6 +84,8 @@ export function createAsyncStorageMealRepository({
   return {
     listMeals: async () => normalizeStoredMeals(await readRecords()),
 
+    countMeals: async () => normalizeStoredMeals(await readRecords()).length,
+
     getMealById: async (id: string) => {
       const record = (await readRecords()).find((candidate) => readStoredMealId(candidate) === id);
       return record === undefined ? null : normalizeStoredMeal(record);

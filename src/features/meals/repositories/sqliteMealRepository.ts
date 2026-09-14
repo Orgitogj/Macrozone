@@ -69,6 +69,12 @@ export function createSqliteMealRepository(
         ),
       ),
 
+    countMeals: () =>
+      read(async (database) => {
+        const row = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM meals', []);
+        return Number(row?.count ?? 0);
+      }),
+
     getMealById: (id: string) =>
       read(async (database) => {
         const row = await database.getFirstAsync<MealRow>(
