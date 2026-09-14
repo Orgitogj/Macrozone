@@ -7,14 +7,16 @@ import {
   skipGoalSetup,
 } from '@/features/nutrition-goals/services/nutritionPlanActions';
 import type { NutritionPlan } from '@/features/nutrition-goals/types';
-
-type PlanState =
-  | { status: 'loading'; plan: null }
-  | { status: 'ready'; plan: NutritionPlan }
-  | { status: 'error'; plan: null; message: string };
+import {
+  createLoadingResource,
+  resolveLoadFailure,
+  resolveLoadSuccess,
+  resolveRetry,
+  type AsyncResource,
+} from '@/utils/asyncResource';
 
 export function useNutritionPlan() {
-  const [state, setState] = useState<PlanState>({ status: 'loading', plan: null });
+  const [resource, setResource] = useState<AsyncResource<NutritionPlan>>(createLoadingResource);
   const latestRequestId = useRef(0);
 
   const reload = useCallback(async () => {
@@ -22,15 +24,12 @@ export function useNutritionPlan() {
     try {
       const plan = await loadNutritionPlan();
       if (requestId === latestRequestId.current) {
-        setState({ status: 'ready', plan });
+        setResource((current) => resolveLoadSuccess(current, plan));
       }
     } catch (error) {
       if (requestId === latestRequestId.current) {
-        setState({
-          status: 'error',
-          plan: null,
-          message: getNutritionPlanErrorMessage(error, 'Could not load your nutrition goals.'),
-        });
+        const message = getNutritionPlanErrorMessage(error, 'Could not load your nutrition goals.');
+        setResource((current) => resolveLoadFailure(current, message));
       }
     }
   }, []);
@@ -42,18 +41,18 @@ export function useNutritionPlan() {
   );
 
   const retry = () => {
-    setState({ status: 'loading', plan: null });
+    setResource(resolveRetry);
     void reload();
   };
 
   const dismissPersonalization = async () => {
     try {
       const plan = await skipGoalSetup();
-      setState({ status: 'ready', plan });
+      setResource((current) => resolveLoadSuccess(current, plan));
     } catch {
       await reload();
     }
   };
 
-  return { state, retry, reload, dismissPersonalization };
+  return { resource, retry, reload, dismissPersonalization };
 }

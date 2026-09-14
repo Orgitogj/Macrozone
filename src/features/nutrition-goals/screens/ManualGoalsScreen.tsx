@@ -1,7 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { StyleSheet, View } from 'react-native';
 
-import { FormScreen } from '@/components/layout/FormScreen';
+import { ScrollScreen } from '@/components/layout/ScrollScreen';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppLoader } from '@/components/ui/AppLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -12,20 +12,21 @@ import { useGoalsNavigation } from '@/features/nutrition-goals/hooks/useGoalsNav
 import { useNutritionPlan } from '@/features/nutrition-goals/hooks/useNutritionPlan';
 import { saveManualGoals } from '@/features/nutrition-goals/services/nutritionPlanActions';
 import { getEffectiveGoals } from '@/features/nutrition-goals/utils/goalProgress';
+import { spacing } from '@/theme';
 
 export function ManualGoalsScreen() {
-  const { state, retry } = useNutritionPlan();
+  const { resource, retry } = useNutritionPlan();
   const navigation = useGoalsNavigation();
 
   return (
-    <FormScreen>
-      {state.status === 'loading' ? <AppLoader accessibilityLabel='Loading nutrition goals' /> : null}
-      {state.status === 'error' ? <ErrorState message={state.message} onRetry={retry} /> : null}
-      {state.status === 'ready' ? (
+    <ScrollScreen edges={['bottom']}>
+      {resource.status === 'loading' ? <AppLoader accessibilityLabel='Loading nutrition goals' /> : null}
+      {resource.status === 'error' ? <ErrorState message={resource.message} onRetry={retry} /> : null}
+      {resource.status === 'ready' ? (
         <View style={styles.content}>
           <NoticeCard message={ESTIMATE_DISCLAIMER} />
           <GoalTargetsEditor
-            initialGoals={getEffectiveGoals(state.plan)}
+            initialGoals={getEffectiveGoals(resource.data)}
             submitLabel='Save Targets'
             onSave={(goals) => saveManualGoals(goals)}
             onSaved={() => {
@@ -36,12 +37,12 @@ export function ManualGoalsScreen() {
           />
         </View>
       ) : null}
-    </FormScreen>
+    </ScrollScreen>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 20,
+    gap: spacing.xl,
   },
 });

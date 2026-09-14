@@ -1,19 +1,21 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { ScrollScreen } from '@/components/layout/ScrollScreen';
 import { AppLoader } from '@/components/ui/AppLoader';
 import { DateNavigator } from '@/components/ui/DateNavigator';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { IconButton } from '@/components/ui/IconButton';
-import { CopySummaryButton } from '@/features/meals/components/CopySummaryButton';
-import { DayMealList } from '@/features/meals/components/DayMealList';
-import { MacroGrid } from '@/features/meals/components/MacroGrid';
-import { ShareSummaryButton } from '@/features/meals/components/ShareSummaryButton';
+import { NoticeCard } from '@/components/ui/NoticeCard';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { SectionHeader } from '@/components/ui/SectionHeader';
+import { TextButton } from '@/components/ui/TextButton';
+import { DailyNutritionSummary } from '@/features/meals/components/DailyNutritionSummary';
+import { DailySummaryActions } from '@/features/meals/components/DailySummaryActions';
+import { MealSection } from '@/features/meals/components/MealSection';
 import { useMealNavigation } from '@/features/meals/hooks/useMealNavigation';
 import { useMeals } from '@/features/meals/hooks/useMeals';
-import {
-  buildDailySummary,
-  formatDailySummaryText,
-} from '@/features/meals/utils/dailySummary';
+import { buildDailySummary, formatDailySummaryText } from '@/features/meals/utils/dailySummary';
+import { groupMealsByType } from '@/features/meals/utils/mealSections';
 import {
   getEffectiveGoals,
   PersonalizeGoalsCard,
@@ -22,100 +24,134 @@ import {
   useNutritionPlan,
 } from '@/features/nutrition-goals';
 import { useSelectedDate } from '@/hooks/useSelectedDate';
-import { globalStyles } from '@/styles/global';
+import { spacing } from '@/theme';
+import { getResourceData } from '@/utils/asyncResource';
 import { formatLongDate, getRelativeDayLabel } from '@/utils/date';
 
 export function HomeScreen() {
-  const { meals, status, errorMessage, retry, requestDeleteMeal, requestClearDay } = useMeals();
+  const mealsState = useMeals();
   const nutritionPlan = useNutritionPlan();
-  const {
-    selectedDateKey,
-    todayKey,
-    isToday,
-    canGoToNextDay,
-    goToPreviousDay,
-    goToNextDay,
-    goToToday,
-  } = useSelectedDate();
-  const navigation = useMealNavigation();
+  const selectedDate = useSelectedDate();
+  const mealNavigation = useMealNavigation();
   const goalsNavigation = useGoalsNavigation();
 
-  const planState = nutritionPlan.state;
-  const plan = planState.status === 'ready' ? planState.plan : null;
-  const summary = buildDailySummary(meals, selectedDateKey, getEffectiveGoals(plan));
+  const { selectedDateKey, todayKey, isToday } = selectedDate;
+  const planResource = nutritionPlan.resource;
+  const mealsResource = mealsState.resource;
+  const plan = getResourceData(planResource);
+
+  const summary = buildDailySummary(mealsState.meals, selectedDateKey, getEffectiveGoals(plan));
+  const sections = groupMealsByType(summary.meals);
   const summaryText = formatDailySummaryText(summary);
   const relativeLabel = getRelativeDayLabel(selectedDateKey, todayKey);
   const longDate = formatLongDate(selectedDateKey, todayKey);
-  const isReady = status === 'ready' && planState.status === 'ready';
-  const isLoading = status === 'loading' || planState.status === 'loading';
+  const isBusy = mealsState.pendingAction !== null;
+
+  const refreshError =
+    (mealsResource.status === 'ready' ? mealsResource.refreshError : null) ??
+    (planResource.status === 'ready' ? planResource.refreshError : null);
+
+  const retryAll = () => {
+    mealsState.retry();
+    nutritionPlan.retry();
+  };
 
   return (
-    <ScrollView style={globalStyles.container}>
-      <View style={globalStyles.header}>
-        <Text style={globalStyles.title} accessibilityRole='header'>
-          MacroZone
-        </Text>
-        <View style={styles.headerActions}>
+    <ScrollScreen edges={['top']}>
+      <ScreenHeader
+        title='MacroZone'
+        actions={
           <IconButton
             icon='options-outline'
             onPress={goalsNavigation.openGoals}
-            accessibilityLabel='Nutrition goals'
-            accessibilityHint='View or change your daily targets'
+            accessibilityLabel='Goals and appearance'
+            accessibilityHint='View or change your daily targets and theme'
           />
-          <ShareSummaryButton summaryText={summaryText} disabled={!isReady} />
-        </View>
-      </View>
+        }
+      />
 
       <DateNavigator
         title={relativeLabel ?? longDate}
         subtitle={relativeLabel ? longDate : undefined}
-        onPrevious={goToPreviousDay}
-        onNext={goToNextDay}
-        canGoNext={canGoToNextDay}
-        onToday={isToday ? undefined : goToToday}
+        onPrevious={selectedDate.goToPreviousDay}
+        onNext={selectedDate.goToNextDay}
+        canGoNext={selectedDate.canGoToNextDay}
+        onToday={isToday ? undefined : selectedDate.goToToday}
       />
 
-      {isLoading && status !== 'error' && planState.status !== 'error' ? (
-        <AppLoader accessibilityLabel='Loading meals' />
-      ) : null}
+      <View style={styles.body}>
+        {refreshError ? (
+          <NoticeCard tone='warning' message={refreshError}>
+            <TextButton label='Try again' size='small' onPress={retryAll} />
+          </NoticeCard>
+        ) : null}
 
-      {status === 'error' ? (
-        <ErrorState message={errorMessage ?? 'Could not load your meals.'} onRetry={retry} />
-      ) : null}
+        {mealsResource.status === 'loading' || planResource.status === 'loading' ? (
+          mealsResource.status === 'error' || planResource.status === 'error' ? null : (
+            <AppLoader accessibilityLabel="Loading today's nutrition" />
+          )
+        ) : null}
 
-      {status !== 'error' && planState.status === 'error' ? (
-        <ErrorState message={planState.message} onRetry={nutritionPlan.retry} />
-      ) : null}
+        {mealsResource.status === 'error' ? (
+          <ErrorState message={mealsResource.message} onRetry={mealsState.retry} />
+        ) : planResource.status === 'error' ? (
+          <ErrorState message={planResource.message} onRetry={nutritionPlan.retry} />
+        ) : null}
 
-      {isReady && plan ? (
-        <>
-          {shouldOfferGoalPersonalization(plan) ? (
-            <PersonalizeGoalsCard
-              onSetUp={goalsNavigation.openCalculator}
-              onDismiss={() => void nutritionPlan.dismissPersonalization()}
-            />
-          ) : null}
-          <MacroGrid progress={summary.goalProgress} />
-          <CopySummaryButton summaryText={summaryText} />
-          <DayMealList
-            meals={summary.meals}
-            emptyMessage={
-              isToday ? 'No meals logged today.' : 'No meals logged on this day.'
-            }
-            onPressMeal={(meal) => navigation.openMeal(meal.id)}
-            onRequestDelete={requestDeleteMeal}
-            onClearDay={() => requestClearDay(selectedDateKey, todayKey)}
-          />
-        </>
-      ) : null}
-    </ScrollView>
+        {mealsResource.status === 'ready' && plan ? (
+          <>
+            <DailyNutritionSummary progress={summary.goalProgress} />
+
+            <View style={styles.meals}>
+              <SectionHeader
+                title='Meals'
+                detail={summary.meals.length === 1 ? '1 meal logged' : `${summary.meals.length} meals logged`}
+                trailing={
+                  summary.meals.length > 0 ? (
+                    <TextButton
+                      label='Clear Day'
+                      tone='danger'
+                      size='small'
+                      disabled={isBusy}
+                      onPress={() => void mealsState.requestClearDay(selectedDateKey, todayKey)}
+                      accessibilityHint='Deletes every meal logged on this day after confirmation'
+                    />
+                  ) : null
+                }
+              />
+              {sections.map((section) => (
+                <MealSection
+                  key={section.mealType}
+                  section={section}
+                  disabled={isBusy}
+                  onAdd={() => mealNavigation.openNewMeal(selectedDateKey, section.mealType)}
+                  onPressMeal={(meal) => mealNavigation.openMeal(meal.id)}
+                  onRequestDelete={(meal) => void mealsState.requestDeleteMeal(meal)}
+                />
+              ))}
+            </View>
+
+            {shouldOfferGoalPersonalization(plan) ? (
+              <PersonalizeGoalsCard
+                onSetUp={goalsNavigation.openCalculator}
+                onDismiss={() => void nutritionPlan.dismissPersonalization()}
+              />
+            ) : null}
+
+            <DailySummaryActions summaryText={summaryText} />
+          </>
+        ) : null}
+      </View>
+    </ScrollScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
+  body: {
+    marginTop: spacing.xl,
+    gap: spacing.xxl,
+  },
+  meals: {
+    gap: spacing.xl,
   },
 });

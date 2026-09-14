@@ -12,14 +12,25 @@ import {
   type DestructiveActionResult,
 } from '@/features/meals/services/mealActions';
 import type { Meal } from '@/features/meals/types';
+import {
+  createLoadingResource,
+  getResourceData,
+  resolveLoadFailure,
+  resolveLoadSuccess,
+  resolveRetry,
+  type AsyncResource,
+} from '@/utils/asyncResource';
 import type { LocalDateKey } from '@/utils/date';
+import { createSingleFlight } from '@/utils/singleFlight';
 
-type LoadStatus = 'loading' | 'ready' | 'error';
+export type MealsPendingAction = 'delete-meal' | 'clear-day' | 'delete-all' | null;
+
+const EMPTY_MEALS: Meal[] = [];
 
 export function useMeals() {
-  const [meals, setMeals] = useState<Meal[]>([]);
-  const [status, setStatus] = useState<LoadStatus>('loading');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [resource, setResource] = useState<AsyncResource<Meal[]>>(createLoadingResource);
+  const [pendingAction, setPendingAction] = useState<MealsPendingAction>(null);
+  const [actionFlight] = useState(createSingleFlight);
   const latestRequestId = useRef(0);
 
   const reload = useCallback(async () => {
@@ -27,19 +38,15 @@ export function useMeals() {
     try {
       const data = await loadAllMeals();
       if (requestId === latestRequestId.current) {
-        setMeals(data);
-        setErrorMessage(null);
-        setStatus('ready');
+        setResource((current) => resolveLoadSuccess(current, data));
       }
     } catch (error) {
       if (__DEV__) {
         console.warn('[meals] Failed to load meals', error);
       }
       if (requestId === latestRequestId.current) {
-        setErrorMessage(
-          getMealErrorMessage(error, 'Could not load your meals. Please try again.'),
-        );
-        setStatus('error');
+        const message = getMealErrorMessage(error, 'Could not load your meals. Please try again.');
+        setResource((current) => resolveLoadFailure(current, message));
       }
     }
   }, []);
@@ -51,32 +58,37 @@ export function useMeals() {
   );
 
   const retry = () => {
-    setStatus('loading');
+    setResource(resolveRetry);
     void reload();
   };
 
-  const runDestructiveAction = async (
+  const meals = getResourceData(resource) ?? EMPTY_MEALS;
+
+  const runDestructiveAction = (
+    kind: Exclude<MealsPendingAction, null>,
     action: () => Promise<DestructiveActionResult>,
     failureMessage: string,
-  ) => {
-    try {
-      if ((await action()) === 'completed') {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  ) =>
+    actionFlight.run(async () => {
+      setPendingAction(kind);
+      try {
+        if ((await action()) === 'completed') {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      } catch (error) {
+        Alert.alert('Error', getMealErrorMessage(error, failureMessage));
+      } finally {
+        setPendingAction(null);
       }
-    } catch (error) {
-      Alert.alert('Error', getMealErrorMessage(error, failureMessage));
-    }
-    await reload();
-  };
+      await reload();
+    });
 
   const requestDeleteMeal = (meal: Meal) =>
-    runDestructiveAction(
-      () => confirmAndDeleteMeal(meal),
-      'Could not delete the meal. Please try again.',
-    );
+    runDestructiveAction('delete-meal', () => confirmAndDeleteMeal(meal), 'Could not delete the meal. Please try again.');
 
   const requestClearDay = (dateKey: LocalDateKey, todayKey: LocalDateKey) =>
     runDestructiveAction(
+      'clear-day',
       () =>
         confirmAndClearDay({
           dateKey,
@@ -88,14 +100,15 @@ export function useMeals() {
 
   const requestDeleteAllHistory = () =>
     runDestructiveAction(
+      'delete-all',
       () => confirmAndDeleteAllMeals(meals.length),
       'Could not delete your meal history. Please try again.',
     );
 
   return {
+    resource,
     meals,
-    status,
-    errorMessage,
+    pendingAction,
     retry,
     requestDeleteMeal,
     requestClearDay,

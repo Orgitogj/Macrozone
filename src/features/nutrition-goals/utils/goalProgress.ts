@@ -32,7 +32,11 @@ export function describeGoalProgress(
     };
   }
 
-  const statusText = isOver ? `${format(progress.exceeded)} over` : `${format(progress.remaining)} left`;
+  const statusText = isOver
+    ? `${format(progress.exceeded)} over`
+    : progress.remaining === 0
+      ? 'Target reached'
+      : `${format(progress.remaining)} left`;
   const percent = Math.round((progress.consumed / progress.goal) * 100);
   return {
     fraction,
