@@ -1,13 +1,7 @@
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, MIN_TOUCH_TARGET } from '@/styles/global';
+import { AppText } from '@/components/ui/AppText';
+import { borderWidths, componentSizes, opacity, radii, spacing, useTheme, useThemedStyles, type Theme } from '@/theme';
 
 type AppButtonVariant = 'primary' | 'secondary' | 'danger';
 
@@ -17,15 +11,10 @@ type AppButtonProps = {
   variant?: AppButtonVariant;
   loading?: boolean;
   disabled?: boolean;
+  accessibilityLabel?: string;
   accessibilityHint?: string;
   style?: StyleProp<ViewStyle>;
 };
-
-const VARIANT_STYLES = {
-  primary: { backgroundColor: colors.primary, borderColor: colors.primary, textColor: colors.background },
-  secondary: { backgroundColor: 'transparent', borderColor: colors.primary, textColor: colors.primary },
-  danger: { backgroundColor: 'transparent', borderColor: colors.alert, textColor: colors.alert },
-} as const;
 
 export function AppButton({
   label,
@@ -33,54 +22,75 @@ export function AppButton({
   variant = 'primary',
   loading = false,
   disabled = false,
+  accessibilityLabel,
   accessibilityHint,
   style,
 }: AppButtonProps) {
-  const palette = VARIANT_STYLES[variant];
+  const theme = useTheme();
+  const styles = useThemedStyles(createStyles);
   const isDisabled = disabled || loading;
+  const textTone = variant === 'primary' ? 'onPrimary' : variant === 'danger' ? 'danger' : 'accent';
+  const indicatorColor =
+    variant === 'primary' ? theme.colors.textOnPrimary : variant === 'danger' ? theme.colors.danger : theme.colors.primary;
 
   return (
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole='button'
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={({ pressed }) => [
         styles.button,
-        { backgroundColor: palette.backgroundColor, borderColor: palette.borderColor },
-        pressed && !isDisabled && styles.pressed,
+        styles[variant],
+        pressed && !isDisabled && (variant === 'primary' ? styles.primaryPressed : styles.pressed),
         disabled && !loading && styles.disabled,
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={palette.textColor} />
+        <ActivityIndicator color={indicatorColor} />
       ) : (
-        <Text style={[styles.label, { color: palette.textColor }]}>{label}</Text>
+        <AppText variant='bodyStrong' tone={textTone} align='center'>
+          {label}
+        </AppText>
       )}
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  button: {
-    minHeight: MIN_TOUCH_TARGET + 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  disabled: {
-    opacity: 0.4,
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    button: {
+      minHeight: componentSizes.control,
+      borderRadius: radii.md,
+      borderWidth: borderWidths.thin,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primary: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    secondary: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.border,
+    },
+    danger: {
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.danger,
+    },
+    primaryPressed: {
+      backgroundColor: theme.colors.primaryPressed,
+      borderColor: theme.colors.primaryPressed,
+    },
+    pressed: {
+      opacity: opacity.pressed,
+    },
+    disabled: {
+      opacity: opacity.disabled,
+    },
+  });

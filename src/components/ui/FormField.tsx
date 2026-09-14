@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors } from '@/styles/global';
+import { AppText } from '@/components/ui/AppText';
+import { spacing } from '@/theme';
 
 type FormFieldProps = {
   label: string;
@@ -12,27 +13,27 @@ type FormFieldProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-export function FormField({
-  label,
-  children,
-  error,
-  hint,
-  optional = false,
-  style,
-}: FormFieldProps) {
+export function FormField({ label, children, error, hint, optional = false, style }: FormFieldProps) {
   return (
     <View style={[styles.container, style]}>
-      <Text style={styles.label} importantForAccessibility='no'>
+      <AppText variant='label' importantForAccessibility='no'>
         {label}
-        {optional ? <Text style={styles.optional}> (optional)</Text> : null}
-      </Text>
+        {optional ? (
+          <AppText variant='label' tone='muted'>
+            {' '}
+            (optional)
+          </AppText>
+        ) : null}
+      </AppText>
       {children}
       {error ? (
-        <Text style={styles.error} accessibilityRole='alert' accessibilityLiveRegion='polite'>
+        <AppText variant='caption' tone='danger' accessibilityRole='alert' accessibilityLiveRegion='polite'>
           {error}
-        </Text>
+        </AppText>
       ) : hint ? (
-        <Text style={styles.hint}>{hint}</Text>
+        <AppText variant='caption' tone='secondary'>
+          {hint}
+        </AppText>
       ) : null}
     </View>
   );
@@ -40,23 +41,6 @@ export function FormField({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 6,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  optional: {
-    fontWeight: 'normal',
-    color: colors.textSecondary,
-  },
-  error: {
-    fontSize: 13,
-    color: colors.alert,
-  },
-  hint: {
-    fontSize: 13,
-    color: colors.textSecondary,
+    gap: spacing.sm,
   },
 });

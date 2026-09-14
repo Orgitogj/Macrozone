@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { colors } from '@/styles/global';
+import { AppText } from '@/components/ui/AppText';
+import { componentSizes, radii, spacing, useThemedStyles, type Theme } from '@/theme';
 
 type StepHeaderProps = {
   current: number;
@@ -10,55 +11,49 @@ type StepHeaderProps = {
 };
 
 export function StepHeader({ current, total, title, subtitle }: StepHeaderProps) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.container}>
-      <Text style={styles.step} accessibilityLabel={`Step ${current} of ${total}`}>
-        Step {current} of {total}
-      </Text>
+      <AppText variant='micro' tone='secondary' accessibilityLabel={`Step ${current} of ${total}`}>
+        STEP {current} OF {total}
+      </AppText>
       <View style={styles.track} importantForAccessibility='no-hide-descendants'>
         {Array.from({ length: total }, (_, index) => (
           <View key={index} style={[styles.segment, index < current && styles.segmentDone]} />
         ))}
       </View>
-      <Text style={styles.title} accessibilityRole='header'>
+      <AppText variant='heading' accessibilityRole='header' style={styles.title}>
         {title}
-      </Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </AppText>
+      {subtitle ? (
+        <AppText variant='body' tone='secondary'>
+          {subtitle}
+        </AppText>
+      ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    gap: 8,
-    marginBottom: 20,
-  },
-  step: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  track: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  segment: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.surface,
-  },
-  segmentDone: {
-    backgroundColor: colors.primary,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.textSecondary,
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      gap: spacing.sm,
+      marginBottom: spacing.xl,
+    },
+    track: {
+      flexDirection: 'row',
+      gap: spacing.xs,
+    },
+    segment: {
+      flex: 1,
+      height: componentSizes.stepIndicator,
+      borderRadius: radii.pill,
+      backgroundColor: theme.colors.surfaceMuted,
+    },
+    segmentDone: {
+      backgroundColor: theme.colors.primary,
+    },
+    title: {
+      marginTop: spacing.xs,
+    },
+  });

@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, MIN_TOUCH_TARGET } from '@/styles/global';
+import { AppText } from '@/components/ui/AppText';
+import { componentSizes, opacity, radii, spacing, useThemedStyles, type Theme } from '@/theme';
 
 type SegmentedControlOption<T extends string> = {
   value: T;
@@ -24,12 +25,10 @@ export function SegmentedControl<T extends string>({
   disabled = false,
   style,
 }: SegmentedControlProps<T>) {
+  const styles = useThemedStyles(createStyles);
+
   return (
-    <View
-      style={[styles.container, style]}
-      accessibilityRole='radiogroup'
-      accessibilityLabel={accessibilityLabel}
-    >
+    <View style={[styles.container, style]} accessibilityRole='radiogroup' accessibilityLabel={accessibilityLabel}>
       {options.map((option) => {
         const selected = option.value === value;
         return (
@@ -47,13 +46,14 @@ export function SegmentedControl<T extends string>({
               disabled && styles.disabled,
             ]}
           >
-            <Text
-              style={[styles.label, selected && styles.selectedLabel]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
+            <AppText
+              variant='label'
+              tone={selected ? 'onPrimary' : 'primary'}
+              align='center'
+              numberOfLines={2}
             >
               {option.label}
-            </Text>
+            </AppText>
           </Pressable>
         );
       })}
@@ -61,37 +61,31 @@ export function SegmentedControl<T extends string>({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: 10,
-    padding: 4,
-    gap: 4,
-  },
-  segment: {
-    flex: 1,
-    minHeight: MIN_TOUCH_TARGET,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  selected: {
-    backgroundColor: colors.primary,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  label: {
-    fontSize: 14,
-    color: colors.text,
-  },
-  selectedLabel: {
-    color: colors.background,
-    fontWeight: '600',
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.surfaceMuted,
+      borderRadius: radii.md,
+      padding: spacing.xs,
+      gap: spacing.xs,
+    },
+    segment: {
+      flex: 1,
+      minHeight: componentSizes.segment,
+      borderRadius: radii.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.xs,
+      paddingVertical: spacing.xs,
+    },
+    selected: {
+      backgroundColor: theme.colors.primary,
+    },
+    pressed: {
+      opacity: opacity.pressed,
+    },
+    disabled: {
+      opacity: opacity.disabled,
+    },
+  });

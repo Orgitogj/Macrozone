@@ -1,7 +1,8 @@
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { AppText } from '@/components/ui/AppText';
 import { TextButton } from '@/components/ui/TextButton';
-import { colors } from '@/styles/global';
+import { spacing } from '@/theme';
 
 type ErrorStateProps = {
   message: string;
@@ -10,27 +11,21 @@ type ErrorStateProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-export function ErrorState({
-  message,
-  onRetry,
-  retryLabel = 'Try again',
-  style,
-}: ErrorStateProps) {
+export function ErrorState({ message, onRetry, retryLabel = 'Try again', style }: ErrorStateProps) {
   return (
     <View style={[styles.container, style]} accessibilityRole='alert'>
-      <Text style={styles.message}>{message}</Text>
-      {onRetry ? <TextButton label={retryLabel} onPress={onRetry} /> : null}
+      <AppText variant='body' tone='danger'>
+        {message}
+      </AppText>
+      {onRetry ? <TextButton label={retryLabel} icon='refresh' onPress={onRetry} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    gap: 8,
+    gap: spacing.sm,
     alignItems: 'flex-start',
-  },
-  message: {
-    color: colors.alert,
-    fontSize: 14,
+    paddingVertical: spacing.lg,
   },
 });

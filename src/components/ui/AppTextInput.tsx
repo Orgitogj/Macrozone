@@ -1,7 +1,19 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
-import { colors, MIN_TOUCH_TARGET } from '@/styles/global';
+import { AppText } from '@/components/ui/AppText';
+import {
+  borderWidths,
+  componentSizes,
+  MAX_FONT_SCALE,
+  opacity,
+  radii,
+  spacing,
+  typography,
+  useTheme,
+  useThemedStyles,
+  type Theme,
+} from '@/theme';
 
 type AppTextInputProps = TextInputProps & {
   hasError?: boolean;
@@ -17,36 +29,9 @@ export function AppTextInput({
   onBlur,
   ...props
 }: AppTextInputProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [isFocused, setIsFocused] = useState(false);
-
-  const input = (
-    <TextInput
-      {...props}
-      editable={editable}
-      placeholderTextColor={colors.textSecondary}
-      onFocus={(event) => {
-        setIsFocused(true);
-        onFocus?.(event);
-      }}
-      onBlur={(event) => {
-        setIsFocused(false);
-        onBlur?.(event);
-      }}
-      style={[
-        styles.input,
-        suffix !== undefined ? styles.inputWithSuffix : [
-          isFocused && styles.focused,
-          hasError && styles.error,
-          !editable && styles.disabled,
-        ],
-        style,
-      ]}
-    />
-  );
-
-  if (suffix === undefined) {
-    return input;
-  }
 
   return (
     <View
@@ -57,52 +42,60 @@ export function AppTextInput({
         !editable && styles.disabled,
       ]}
     >
-      {input}
-      <Text style={styles.suffix} importantForAccessibility='no'>
-        {suffix}
-      </Text>
+      <TextInput
+        {...props}
+        editable={editable}
+        placeholderTextColor={colors.textMuted}
+        selectionColor={colors.primary}
+        maxFontSizeMultiplier={MAX_FONT_SCALE.body}
+        onFocus={(event) => {
+          setIsFocused(true);
+          onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setIsFocused(false);
+          onBlur?.(event);
+        }}
+        style={[styles.input, style]}
+      />
+      {suffix !== undefined ? (
+        <AppText variant='label' tone='secondary' importantForAccessibility='no' style={styles.suffix}>
+          {suffix}
+        </AppText>
+      ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  input: {
-    minHeight: MIN_TOUCH_TARGET + 8,
-    backgroundColor: colors.surface,
-    color: colors.text,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.surface,
-    fontSize: 16,
-  },
-  inputWithSuffix: {
-    flex: 1,
-    borderWidth: 0,
-    backgroundColor: 'transparent',
-    paddingRight: 8,
-  },
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.surface,
-    paddingRight: 14,
-  },
-  suffix: {
-    fontSize: 15,
-    color: colors.textSecondary,
-  },
-  focused: {
-    borderColor: colors.primary,
-  },
-  error: {
-    borderColor: colors.alert,
-  },
-  disabled: {
-    opacity: 0.6,
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      minHeight: componentSizes.control,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      borderRadius: radii.md,
+      borderWidth: borderWidths.thin,
+      borderColor: theme.colors.border,
+    },
+    input: {
+      ...typography.body,
+      flex: 1,
+      minHeight: componentSizes.control,
+      color: theme.colors.textPrimary,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+    },
+    suffix: {
+      paddingRight: spacing.lg,
+    },
+    focused: {
+      borderColor: theme.colors.borderFocused,
+    },
+    error: {
+      borderColor: theme.colors.danger,
+    },
+    disabled: {
+      opacity: opacity.disabled,
+    },
+  });

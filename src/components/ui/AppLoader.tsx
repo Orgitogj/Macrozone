@@ -1,35 +1,24 @@
-import {
-  ActivityIndicator,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors } from '@/styles/global';
+import { spacing, useTheme } from '@/theme';
 
 type AppLoaderProps = {
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 };
 
-export function AppLoader({
-  accessibilityLabel = 'Loading',
-  style,
-}: AppLoaderProps) {
+export function AppLoader({ accessibilityLabel = 'Loading', style }: AppLoaderProps) {
+  const { colors } = useTheme();
   return (
-    <View style={[styles.container, style]}>
-      <ActivityIndicator
-        color={colors.primary}
-        accessibilityLabel={accessibilityLabel}
-      />
+    <View style={[styles.container, style]} accessible accessibilityRole='progressbar' accessibilityLabel={accessibilityLabel}>
+      <ActivityIndicator color={colors.primary} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 24,
+    paddingVertical: spacing.xxl,
     alignItems: 'center',
   },
 });

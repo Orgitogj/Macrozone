@@ -1,7 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, MIN_TOUCH_TARGET } from '@/styles/global';
+import { AppText } from '@/components/ui/AppText';
+import {
+  borderWidths,
+  iconSizes,
+  opacity,
+  radii,
+  spacing,
+  touchTargets,
+  useTheme,
+  useThemedStyles,
+  type Theme,
+} from '@/theme';
 
 export type ChoiceOption<T extends string | number> = {
   value: T;
@@ -30,6 +41,9 @@ export function ChoiceList<T extends string | number>({
   hasError = false,
   style,
 }: ChoiceListProps<T>) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={[styles.list, style]} accessibilityRole='radiogroup' accessibilityLabel={accessibilityLabel}>
       {options.map((option) => {
@@ -51,13 +65,17 @@ export function ChoiceList<T extends string | number>({
             ]}
           >
             <View style={styles.texts}>
-              <Text style={styles.label}>{option.label}</Text>
-              {option.description ? <Text style={styles.description}>{option.description}</Text> : null}
+              <AppText variant='bodyStrong'>{option.label}</AppText>
+              {option.description ? (
+                <AppText variant='caption' tone='secondary'>
+                  {option.description}
+                </AppText>
+              ) : null}
             </View>
             <Ionicons
               name={selected ? 'radio-button-on' : 'radio-button-off'}
-              size={22}
-              color={selected ? colors.primary : colors.textSecondary}
+              size={iconSizes.md}
+              color={selected ? colors.primary : colors.textMuted}
             />
           </Pressable>
         );
@@ -66,45 +84,38 @@ export function ChoiceList<T extends string | number>({
   );
 }
 
-const styles = StyleSheet.create({
-  list: {
-    gap: 10,
-  },
-  option: {
-    minHeight: MIN_TOUCH_TARGET + 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  selected: {
-    borderColor: colors.primary,
-  },
-  error: {
-    borderColor: colors.alert,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  texts: {
-    flex: 1,
-    gap: 2,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  description: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    list: {
+      gap: spacing.sm,
+    },
+    option: {
+      minHeight: touchTargets.comfortable,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: radii.md,
+      borderWidth: borderWidths.thin,
+      borderColor: theme.colors.border,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+    },
+    selected: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primarySubtle,
+    },
+    error: {
+      borderColor: theme.colors.danger,
+    },
+    pressed: {
+      opacity: opacity.pressed,
+    },
+    disabled: {
+      opacity: opacity.disabled,
+    },
+    texts: {
+      flex: 1,
+      gap: spacing.xxs,
+    },
+  });

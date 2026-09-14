@@ -1,11 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppText } from '@/components/ui/AppText';
 import type { DateTimePickerFieldProps } from '@/components/ui/dateTimePickerFieldTypes';
 import { TextButton } from '@/components/ui/TextButton';
-import { colors, MIN_TOUCH_TARGET } from '@/styles/global';
+import {
+  borderWidths,
+  componentSizes,
+  iconSizes,
+  opacity,
+  radii,
+  spacing,
+  touchTargets,
+  useTheme,
+  useThemedStyles,
+  type Theme,
+} from '@/theme';
 import { clampDateToMaximum } from '@/utils/dateTimeInput';
 
 export function DateTimePickerField({
@@ -22,6 +35,9 @@ export function DateTimePickerField({
   onOpenChange,
   style,
 }: DateTimePickerFieldProps) {
+  const theme = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
   const [iosDraft, setIosDraft] = useState<Date | null>(null);
   const androidOpen = useRef(false);
   const dateMaximum = mode === 'date' ? maximumDate : undefined;
@@ -88,21 +104,16 @@ export function DateTimePickerField({
       >
         <Ionicons
           name={mode === 'date' ? 'calendar-outline' : 'time-outline'}
-          size={20}
-          color={colors.primary}
+          size={iconSizes.md}
+          color={theme.colors.primary}
         />
-        <Text style={[styles.value, isEmpty && styles.placeholder]} numberOfLines={1}>
+        <AppText variant='body' tone={isEmpty ? 'muted' : 'primary'} numberOfLines={1} style={styles.value}>
           {displayValue}
-        </Text>
+        </AppText>
       </Pressable>
 
       {Platform.OS === 'ios' ? (
-        <Modal
-          visible={iosDraft !== null}
-          transparent
-          animationType='slide'
-          onRequestClose={() => closeIos(false)}
-        >
+        <Modal visible={iosDraft !== null} transparent animationType='slide' onRequestClose={() => closeIos(false)}>
           <View style={styles.modalRoot}>
             <Pressable
               style={styles.backdrop}
@@ -110,12 +121,12 @@ export function DateTimePickerField({
               accessibilityRole='button'
               accessibilityLabel='Cancel'
             />
-            <View style={styles.sheet}>
+            <View style={[styles.sheet, { paddingBottom: spacing.xxl + insets.bottom }]}>
               <View style={styles.toolbar}>
-                <TextButton label='Cancel' onPress={() => closeIos(false)} />
-                <Text style={styles.sheetTitle} accessibilityRole='header'>
+                <TextButton label='Cancel' tone='secondary' onPress={() => closeIos(false)} />
+                <AppText variant='subheading' accessibilityRole='header'>
                   {accessibilityLabel}
-                </Text>
+                </AppText>
                 <TextButton label='Done' onPress={() => closeIos(true)} />
               </View>
               {iosDraft ? (
@@ -124,9 +135,9 @@ export function DateTimePickerField({
                   mode={mode}
                   display={mode === 'date' ? 'inline' : 'spinner'}
                   maximumDate={dateMaximum}
-                  themeVariant='dark'
-                  accentColor={colors.primary}
-                  textColor={colors.text}
+                  themeVariant={theme.scheme}
+                  accentColor={theme.colors.primary}
+                  textColor={theme.colors.textPrimary}
                   onChange={(_event, selected) => {
                     if (selected) {
                       setIosDraft(selected);
@@ -143,64 +154,53 @@ export function DateTimePickerField({
   );
 }
 
-const styles = StyleSheet.create({
-  trigger: {
-    minHeight: MIN_TOUCH_TARGET + 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.surface,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  error: {
-    borderColor: colors.alert,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  disabled: {
-    opacity: 0.6,
-  },
-  value: {
-    flex: 1,
-    fontSize: 16,
-    color: colors.text,
-  },
-  placeholder: {
-    color: colors.textSecondary,
-  },
-  modalRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.background,
-    opacity: 0.7,
-  },
-  sheet: {
-    backgroundColor: colors.header,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-  },
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: MIN_TOUCH_TARGET + 8,
-  },
-  sheetTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  iosPicker: {
-    alignSelf: 'center',
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    trigger: {
+      minHeight: componentSizes.control,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      backgroundColor: theme.colors.surface,
+      borderRadius: radii.md,
+      borderWidth: borderWidths.thin,
+      borderColor: theme.colors.border,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+    },
+    error: {
+      borderColor: theme.colors.danger,
+    },
+    pressed: {
+      opacity: opacity.pressed,
+    },
+    disabled: {
+      opacity: opacity.disabled,
+    },
+    value: {
+      flex: 1,
+    },
+    modalRoot: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: theme.colors.overlay,
+    },
+    sheet: {
+      backgroundColor: theme.colors.surfaceElevated,
+      borderTopLeftRadius: radii.lg,
+      borderTopRightRadius: radii.lg,
+      paddingHorizontal: spacing.lg,
+    },
+    toolbar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      minHeight: touchTargets.comfortable,
+    },
+    iosPicker: {
+      alignSelf: 'center',
+    },
+  });

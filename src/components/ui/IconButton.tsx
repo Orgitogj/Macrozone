@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, MIN_TOUCH_TARGET } from '@/styles/global';
+import { iconSizes, opacity, touchTargets, useTheme } from '@/theme';
 
 type IconButtonProps = {
   icon: ComponentProps<typeof Ionicons>['name'];
@@ -11,7 +11,7 @@ type IconButtonProps = {
   accessibilityHint?: string;
   disabled?: boolean;
   size?: number;
-  color?: string;
+  tone?: 'primary' | 'secondary' | 'danger';
   style?: StyleProp<ViewStyle>;
 };
 
@@ -21,11 +21,13 @@ export function IconButton({
   accessibilityLabel,
   accessibilityHint,
   disabled = false,
-  size = 24,
-  color = colors.primary,
+  size = iconSizes.lg,
+  tone = 'primary',
   style,
 }: IconButtonProps) {
-  const slop = Math.max(0, (MIN_TOUCH_TARGET - size) / 2);
+  const { colors } = useTheme();
+  const color = tone === 'danger' ? colors.danger : tone === 'secondary' ? colors.textSecondary : colors.primary;
+  const slop = Math.max(0, (touchTargets.min - size) / 2);
 
   return (
     <Pressable
@@ -36,10 +38,7 @@ export function IconButton({
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled }}
-      style={({ pressed }) => [
-        disabled ? styles.disabled : pressed && styles.pressed,
-        style,
-      ]}
+      style={({ pressed }) => [disabled ? styles.disabled : pressed && styles.pressed, style]}
     >
       <Ionicons name={icon} size={size} color={color} />
     </Pressable>
@@ -48,9 +47,9 @@ export function IconButton({
 
 const styles = StyleSheet.create({
   pressed: {
-    opacity: 0.6,
+    opacity: opacity.pressed,
   },
   disabled: {
-    opacity: 0.3,
+    opacity: opacity.disabled,
   },
 });
