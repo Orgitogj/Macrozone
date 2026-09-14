@@ -1,0 +1,66 @@
+import type { ColorScheme, Theme, ThemeColors } from '@/theme/types';
+
+export const darkColors: ThemeColors = {
+  background: '#14152B',
+  surface: '#1E2040',
+  surfaceElevated: '#26284D',
+  surfaceMuted: '#2C2E55',
+  overlay: 'rgba(5, 6, 20, 0.72)',
+  textPrimary: '#F4F5FB',
+  textSecondary: '#B7BAD1',
+  textMuted: '#9296B2',
+  textOnPrimary: '#06121C',
+  primary: '#4FC3F7',
+  primaryPressed: '#86D6FA',
+  primarySubtle: '#1C3550',
+  border: '#34375E',
+  borderFocused: '#4FC3F7',
+  success: '#5EDB8F',
+  warning: '#FFD166',
+  warningSubtle: '#3D3420',
+  danger: '#FF7A7A',
+  dangerSubtle: '#462332',
+  calories: '#FF8A7A',
+  protein: '#4ECDC4',
+  carbs: '#FFD166',
+  fat: '#7BD88F',
+};
+
+export const lightColors: ThemeColors = {
+  background: '#F4F6FB',
+  surface: '#FFFFFF',
+  surfaceElevated: '#FFFFFF',
+  surfaceMuted: '#E9EDF5',
+  overlay: 'rgba(15, 20, 40, 0.45)',
+  textPrimary: '#141833',
+  textSecondary: '#4A506B',
+  textMuted: '#646A85',
+  textOnPrimary: '#FFFFFF',
+  primary: '#0B72A8',
+  primaryPressed: '#095D89',
+  primarySubtle: '#DCEFF9',
+  border: '#D7DCE8',
+  borderFocused: '#0B72A8',
+  success: '#17803D',
+  warning: '#9A5B00',
+  warningSubtle: '#FCEFD6',
+  danger: '#C4283B',
+  dangerSubtle: '#FBE1E4',
+  calories: '#D2493C',
+  protein: '#0F857D',
+  carbs: '#B26A00',
+  fat: '#2E8540',
+};
+
+export const themes: Readonly<Record<ColorScheme, Theme>> = {
+  dark: {
+    scheme: 'dark',
+    colors: darkColors,
+    shadows: { card: {} },
+  },
+  light: {
+    scheme: 'light',
+    colors: lightColors,
+    shadows: { card: { boxShadow: '0px 1px 3px rgba(16, 24, 40, 0.08)' } },
+  },
+};
