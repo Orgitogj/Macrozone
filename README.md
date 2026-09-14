@@ -10,10 +10,16 @@ The app is currently an early MVP. All data stays on the device.
 
 ## Current features
 
-- **Home (daily view):** move to the previous or next day, or jump back to today. Future dates are not selectable. Calorie, protein, carb, and fat totals for the selected day are shown against fixed goals, followed by that day's meals.
-- **Add Meal:** log a meal with a name, calories, and optional protein, carbs, and fat. The meal is assigned to today's local date, and Home then opens on that day.
-- **All Meals (history):** every logged meal, grouped by local date (newest first) with daily calorie totals, in a virtualized list. Includes a "Clear All" action.
-- **Delete a meal:** long-press a meal and confirm. The delete action is also available to screen readers.
+- **Home (daily view):** move to the previous or next day, or jump back to today. Future dates are not selectable. Calorie, protein, carb, and fat totals for the selected day are shown against fixed goals, followed by that day's meals ordered by time eaten. "Clear Day" deletes the selected day's meals after confirmation.
+- **Add Meal:** log a meal with a name, meal type (breakfast, lunch, dinner, snack), date (today or earlier), an optional time, calories, and optional protein, carbs, and fat.
+  - The date is chosen with a native date picker (future dates are blocked) or with the previous/next-day and Today controls. The optional time uses a native time picker and can be cleared.
+  - On Android the pickers open as system dialogs. On iOS they open in a bottom sheet with Cancel and Done. On web they use the browser's date and time inputs. Saving is disabled while a picker is open.
+  - Fields are validated inline. Decimals accept `.` or `,`, negative values are rejected, and limits are 10,000 kcal and 1,000 g per macro.
+  - While saving, the button shows progress and ignores repeated taps. If saving fails, the form keeps what you entered.
+  - After saving, Home opens on the meal's date without adding duplicate navigation history.
+- **Meal details:** tap a meal to edit any field (including moving it to another meal type or date), duplicate it into a new meal dated today, or delete it.
+- **Deleting:** every meal row has a visible delete button. Long-pressing a row and the screen-reader "Delete" action are shortcuts. Every deletion asks for confirmation.
+- **All Meals (history):** every logged meal, grouped by local date (newest first) with daily calorie totals, in a virtualized list. "Delete All" removes the entire history after a separate confirmation.
 - **Copy / Share summary:** copy or share a plain-text summary of the selected day, including consumed, goal, and remaining or exceeded values for each macro.
 - **Local persistence:** meals are stored on the device with AsyncStorage. Data saved by earlier versions keeps loading.
 - **Meal reminders (not reachable in the UI yet):** code exists for daily lunch and dinner notifications, but no screen renders it.
@@ -26,7 +32,8 @@ The app is currently an early MVP. All data stays on the device.
 | Navigation    | Expo Router 6 (file-based routing, typed routes)                  |
 | Language      | TypeScript 5.9 (`strict`)                                         |
 | Persistence   | `@react-native-async-storage/async-storage`                       |
-| Device APIs   | `expo-notifications`, `expo-haptics`, `expo-clipboard`            |
+| Device APIs   | `expo-notifications`, `expo-haptics`, `expo-clipboard`, `expo-crypto` |
+| Pickers       | `@react-native-community/datetimepicker` (Android and iOS; web uses HTML inputs) |
 | Tooling       | ESLint 9 (`eslint-config-expo`), Expo Doctor, React Compiler (experimental) |
 | Testing       | Jest 29 with `jest-expo`                                          |
 
@@ -72,24 +79,32 @@ When adding or updating Expo-related packages, use `npx expo install <package>` 
 ```text
 src/
   app/                        Expo Router routes (thin: they render feature screens)
-    _layout.tsx               Root stack
+    _layout.tsx               Root stack (tabs plus meal detail screens)
     (tabs)/                   Home, Add Meal, All Meals tabs
+    meal/[id].tsx             Edit meal
+    meal/new.tsx              Duplicate meal (?duplicateOf=<id>)
   features/
     meals/
-      components/             Presentational meal UI (macro grid, meal rows, history list, copy/share)
-      hooks/useMeals.ts       Load on focus, delete, clear, loading/error state
-      screens/                HomeScreen, MealHistoryScreen
+      components/             Presentational meal UI (form, macro grid, meal rows, history list, copy/share)
+      hooks/                  useMeals, useMeal, useMealForm, useMealNavigation
+      screens/                Home, MealHistory, CreateMeal, EditMeal
+      services/mealActions.ts Use cases: submit form, confirm-and-delete meal/day/all
       storage/mealStorage.ts  AsyncStorage access and legacy-data handling
       utils/                  Pure logic: totals, date filtering/grouping, summaries, record normalization
+      validation/mealForm.ts  Form values, validation rules and messages
       types.ts, constants.ts
       index.ts                Public API of the feature
     nutrition-goals/          Goal types, default goals, remaining/exceeded calculations
   components/
-    ui/                       Shared UI: DateNavigator, IconButton, TextButton, loading/empty/error states
+    layout/FormScreen.tsx     Scrollable, keyboard-aware form screen
+    ui/                       Shared UI: AppButton, AppTextInput, FormField, SegmentedControl, DateNavigator,
+                              DateTimePickerField (.tsx native, .web.tsx web), IconButton, TextButton,
+                              loading/empty/error states
     ReminderToggle.tsx        Not yet rendered (reminders phase)
   hooks/                      Cross-feature hooks: useSelectedDate, useTodayDateKey
   types/nutrition.ts          Shared nutrition types (MacroTotals)
-  utils/                      Pure shared utilities: local dates, number formatting, confirmation dialog
+  utils/                      Pure shared utilities: dates, times, date/time input conversion, number input, formatting, ids,
+                              single-flight guard, route params, confirmation dialog
   styles/global.ts            Shared colors and base styles
 jest.environment.js           Jest environment that pins and switches timezones
 assets/images/                App icon, adaptive icons, splash image, favicon
@@ -101,9 +116,17 @@ Import paths use the `@/` alias, which maps to `src/` (see `tsconfig.json`). For
 
 - **Local calendar days.** Every meal belongs to a local calendar day, stored as a `YYYY-MM-DD` key (`LocalDateKey`) that is computed from the device's local time. Days are never derived from the UTC ISO string, which would put late-evening or early-morning meals on the wrong day.
 - **Selected day in the URL.** Home keeps the selected day in its `date` route parameter (`/?date=2026-09-13`). Missing, invalid, or future values fall back to today.
-- **Older saved meals keep working.** Meals saved before this version have no `date` or `mealType`. When they are read, `date` is derived from `createdAt` in the device's current timezone, `mealType` is inferred from the local time of day, and missing numbers become 0. Nothing is rewritten.
-- **New meals** store `date` and `mealType` explicitly.
-- **Unreadable data is never overwritten.** Stored records that cannot be interpreted are hidden but preserved when meals are added or deleted. If the stored data is corrupted, the app shows an error instead of replacing it.
+- **Meal record fields.** Each meal stores `id` (a UUID v4 from `expo-crypto`'s cryptographically secure generator; if an ID cannot be generated, the save fails and nothing is written), `name`, `calories`, `protein`, `carbs`, `fat`, `mealType`, `date`, an optional `time` (`HH:MM`, local 24-hour), `createdAt`, and `updatedAt`.
+- **Older saved meals keep working.** Meals saved by earlier versions may lack `date`, `mealType`, `time`, or `updatedAt`. When they are read:
+  - `date` is derived from `createdAt` in the device's current timezone;
+  - `mealType` is inferred from the local time of day;
+  - `time` is empty;
+  - `updatedAt` equals `createdAt`;
+  - missing numbers become 0.
+
+  Nothing is rewritten on read. Older numeric ids keep working.
+- **Edits keep unknown fields.** An edit merges into the stored record, so fields this version does not know about are kept.
+- **Unreadable data is never overwritten.** Stored records that cannot be interpreted are hidden but preserved when meals are added, edited, or deleted. If the stored data is corrupted, the app shows an error instead of replacing it.
 
 ## Testing
 
@@ -114,13 +137,10 @@ Business logic is implemented as pure functions and unit-tested with Jest (`npm 
 
 ## Current limitations
 
-- Meals can only be logged for today. There is no date, time, or meal-type field in the Add Meal form yet.
-- Meal types are stored (inferred from the time of day) but not yet shown or editable.
 - Nutrition goals are fixed defaults (2,000 kcal / 150 g protein / 250 g carbs / 65 g fat).
-- There is no editing. Meals can only be deleted, and only by long-pressing (or through the screen-reader action).
-- "Clear All" deletes all history immediately, with no confirmation.
-- Form validation is minimal: non-numeric or negative values are not rejected.
-- Storage has no schema versioning and no protection against concurrent writes. Meal IDs come from `Date.now()`. Older meals' dates are derived when they are read, so they can shift if the device timezone changes, until the storage migration saves them.
+- There are no serving sizes yet (planned together with recipes).
+- Storage has no schema versioning and no protection against concurrent writes from separate processes. Older meals' dates are derived when they are read, so they can shift if the device timezone changes, until the storage migration saves them.
+- On Android, the form scrolls, but the keyboard is not otherwise avoided (edge-to-edge keyboard handling is planned with the UX phase).
 - Reminders cannot be reached in the UI, and they cancel *all* scheduled notifications rather than only MacroZone's own.
 - The app uses a dark-only theme and fixed top padding instead of safe areas.
 - If Home is left open on today past midnight, it moves to the new day the next time the screen gains focus.
