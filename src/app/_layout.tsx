@@ -4,27 +4,29 @@ import { StyleSheet, View } from 'react-native';
 import { AppLoader } from '@/components/ui/AppLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { OnboardingGateProvider, useOnboardingGate } from '@/features/onboarding';
-import { colors } from '@/styles/global';
-
-const detailScreenOptions = {
-  headerShown: true,
-  headerStyle: { backgroundColor: colors.background },
-  headerTintColor: colors.text,
-  headerShadowVisible: false,
-  contentStyle: { backgroundColor: colors.background },
-} as const;
+import { AppThemeProvider, layout, useTheme } from '@/theme';
 
 function RootNavigator() {
+  const { colors } = useTheme();
   const { state, retry } = useOnboardingGate();
 
   if (state.status !== 'ready') {
     return (
-      <View style={styles.gate}>
+      <View style={[styles.gate, { backgroundColor: colors.background }]}>
         {state.status === 'loading' ? <AppLoader accessibilityLabel='Starting MacroZone' /> : null}
         {state.status === 'error' ? <ErrorState message={state.message} onRetry={retry} /> : null}
       </View>
     );
   }
+
+  const detailScreenOptions = {
+    headerShown: true,
+    headerStyle: { backgroundColor: colors.background },
+    headerTintColor: colors.primary,
+    headerTitleStyle: { color: colors.textPrimary },
+    headerShadowVisible: false,
+    contentStyle: { backgroundColor: colors.background },
+  } as const;
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
@@ -45,9 +47,11 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <OnboardingGateProvider>
-      <RootNavigator />
-    </OnboardingGateProvider>
+    <AppThemeProvider>
+      <OnboardingGateProvider>
+        <RootNavigator />
+      </OnboardingGateProvider>
+    </AppThemeProvider>
   );
 }
 
@@ -55,7 +59,6 @@ const styles = StyleSheet.create({
   gate: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    backgroundColor: colors.background,
+    paddingHorizontal: layout.screenPaddingHorizontal,
   },
 });
