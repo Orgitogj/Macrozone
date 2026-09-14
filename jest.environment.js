@@ -9,6 +9,10 @@ module.exports = class MacroZoneTestEnvironment extends ReactNativeEnv {
     this.global.__setTestTimeZone = (timeZone) => {
       process.env.TZ = timeZone;
     };
+    this.global.__openTestSqliteDatabase = () => {
+      const { DatabaseSync } = require('node:sqlite');
+      return new DatabaseSync(':memory:');
+    };
   }
 
   async teardown() {
