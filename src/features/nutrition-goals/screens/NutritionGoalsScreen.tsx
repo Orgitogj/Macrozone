@@ -10,12 +10,14 @@ import { GoalsOverview } from '@/features/nutrition-goals/components/GoalsOvervi
 import { ESTIMATE_DISCLAIMER } from '@/features/nutrition-goals/constants';
 import { useGoalsNavigation } from '@/features/nutrition-goals/hooks/useGoalsNavigation';
 import { useNutritionPlan } from '@/features/nutrition-goals/hooks/useNutritionPlan';
+import { RemindersEntryCard, useReminderNavigation } from '@/features/reminders';
 import { AppearanceSettings } from '@/features/settings';
 import { spacing } from '@/theme';
 
 export function NutritionGoalsScreen() {
   const { resource, retry } = useNutritionPlan();
   const navigation = useGoalsNavigation();
+  const reminderNavigation = useReminderNavigation();
 
   return (
     <ScrollScreen edges={['bottom']}>
@@ -41,6 +43,7 @@ export function NutritionGoalsScreen() {
             <NoticeCard message={ESTIMATE_DISCLAIMER} />
           </>
         ) : null}
+        <RemindersEntryCard onPress={reminderNavigation.openReminders} />
         <AppearanceSettings />
       </View>
     </ScrollScreen>

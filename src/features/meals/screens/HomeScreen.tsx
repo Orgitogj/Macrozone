@@ -64,8 +64,8 @@ export function HomeScreen() {
           <IconButton
             icon='options-outline'
             onPress={goalsNavigation.openGoals}
-            accessibilityLabel='Goals and appearance'
-            accessibilityHint='View or change your daily targets and theme'
+            accessibilityLabel='Goals, reminders and appearance'
+            accessibilityHint='View or change your daily targets, meal reminders and theme'
           />
         }
       />

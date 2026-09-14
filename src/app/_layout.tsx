@@ -4,11 +4,13 @@ import { StyleSheet, View } from 'react-native';
 import { AppLoader } from '@/components/ui/AppLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { OnboardingGateProvider, useOnboardingGate } from '@/features/onboarding';
+import { useReminderLifecycle } from '@/features/reminders';
 import { AppThemeProvider, layout, useTheme } from '@/theme';
 
 function RootNavigator() {
   const { colors } = useTheme();
   const { state, retry } = useOnboardingGate();
+  useReminderLifecycle(state.status === 'ready' && !state.needsOnboarding);
 
   if (state.status !== 'ready') {
     return (
@@ -40,6 +42,7 @@ function RootNavigator() {
         <Stack.Screen name='goals/index' options={{ ...detailScreenOptions, title: 'Nutrition Goals' }} />
         <Stack.Screen name='goals/calculate' options={{ ...detailScreenOptions, title: 'Calculate Goals' }} />
         <Stack.Screen name='goals/edit' options={{ ...detailScreenOptions, title: 'Edit Goals' }} />
+        <Stack.Screen name='reminders' options={{ ...detailScreenOptions, title: 'Meal Reminders' }} />
       </Stack.Protected>
     </Stack>
   );
