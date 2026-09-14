@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AppButton } from '@/components/ui/AppButton';
+import { AppText } from '@/components/ui/AppText';
 import { AppTextInput } from '@/components/ui/AppTextInput';
 import { FormField } from '@/components/ui/FormField';
 import { NoticeCard } from '@/components/ui/NoticeCard';
 import { useGoalTargetsForm } from '@/features/nutrition-goals/hooks/useGoalTargetsForm';
 import type { DailyNutritionGoals, NutritionPlan } from '@/features/nutrition-goals/types';
-import { colors } from '@/styles/global';
+import { spacing } from '@/theme';
 import type { MacroKey } from '@/types/nutrition';
 
 type GoalTargetsEditorProps = {
@@ -64,9 +65,9 @@ export function GoalTargetsEditor({
       ))}
 
       {form.saveError ? (
-        <Text style={styles.saveError} accessibilityRole='alert' accessibilityLiveRegion='assertive'>
+        <AppText variant='body' tone='danger' accessibilityRole='alert' accessibilityLiveRegion='assertive'>
           {form.saveError}
-        </Text>
+        </AppText>
       ) : null}
 
       <AppButton label={submitLabel} onPress={handleSubmit} loading={form.isSaving} />
@@ -77,10 +78,6 @@ export function GoalTargetsEditor({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 16,
-  },
-  saveError: {
-    fontSize: 14,
-    color: colors.alert,
+    gap: spacing.lg,
   },
 });

@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AppButton } from '@/components/ui/AppButton';
+import { AppText } from '@/components/ui/AppText';
 import { StepHeader } from '@/components/ui/StepHeader';
 import { ActivityLevelStep } from '@/features/nutrition-goals/components/ActivityLevelStep';
 import { BodyDetailsStep } from '@/features/nutrition-goals/components/BodyDetailsStep';
@@ -11,7 +12,7 @@ import { useGoalCalculatorFlow } from '@/features/nutrition-goals/hooks/useGoalC
 import type { NutritionPlan } from '@/features/nutrition-goals/types';
 import { getCalculatorStepPosition, type CalculatorStep } from '@/features/nutrition-goals/utils/calculatorFlow';
 import type { BodyProfile } from '@/features/profile/types';
-import { colors } from '@/styles/global';
+import { spacing } from '@/theme';
 
 type GoalCalculatorFlowProps = {
   initialProfile: BodyProfile | null;
@@ -98,9 +99,9 @@ export function GoalCalculatorFlow({ initialProfile, onSaved, onExit, exitLabel 
       ) : null}
 
       {flow.saveError ? (
-        <Text style={styles.saveError} accessibilityRole='alert' accessibilityLiveRegion='assertive'>
+        <AppText variant='body' tone='danger' style={styles.saveError} accessibilityRole='alert' accessibilityLiveRegion='assertive'>
           {flow.saveError}
-        </Text>
+        </AppText>
       ) : null}
 
       {flow.step !== 'adjust' ? (
@@ -132,12 +133,10 @@ export function GoalCalculatorFlow({ initialProfile, onSaved, onExit, exitLabel 
 
 const styles = StyleSheet.create({
   actions: {
-    gap: 12,
-    marginTop: 24,
+    gap: spacing.md,
+    marginTop: spacing.xxl,
   },
   saveError: {
-    marginTop: 16,
-    fontSize: 14,
-    color: colors.alert,
+    marginTop: spacing.lg,
   },
 });

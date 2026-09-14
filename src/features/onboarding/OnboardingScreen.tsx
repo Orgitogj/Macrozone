@@ -1,8 +1,10 @@
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
-import { Alert, BackHandler, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, StyleSheet, View } from 'react-native';
 
-import { FormScreen } from '@/components/layout/FormScreen';
+import { ScrollScreen } from '@/components/layout/ScrollScreen';
+import { AppText } from '@/components/ui/AppText';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { AppButton } from '@/components/ui/AppButton';
 import { NoticeCard } from '@/components/ui/NoticeCard';
 import { GoalCalculatorFlow } from '@/features/nutrition-goals/components/GoalCalculatorFlow';
@@ -14,7 +16,7 @@ import {
   skipGoalSetup,
 } from '@/features/nutrition-goals/services/nutritionPlanActions';
 import { useOnboardingGate } from '@/features/onboarding/OnboardingGateProvider';
-import { colors } from '@/styles/global';
+import { spacing } from '@/theme';
 import { createSingleFlight } from '@/utils/singleFlight';
 
 type OnboardingMode = 'welcome' | 'calculate' | 'manual';
@@ -56,22 +58,26 @@ export function OnboardingScreen() {
 
   if (mode === 'calculate') {
     return (
-      <FormScreen title='Set Up Your Goals'>
+      <ScrollScreen edges={['top', 'bottom']}>
+        <ScreenHeader title='Set Up Your Goals' />
         <GoalCalculatorFlow
           initialProfile={null}
           exitLabel='Back'
           onExit={() => setMode('welcome')}
           onSaved={finish}
         />
-      </FormScreen>
+      </ScrollScreen>
     );
   }
 
   if (mode === 'manual') {
     return (
-      <FormScreen title='Enter Your Goals'>
+      <ScrollScreen edges={['top', 'bottom']}>
+        <ScreenHeader title='Enter Your Goals' />
         <View style={styles.content}>
-          <Text style={styles.body}>Enter the daily targets you want to track. You can change them any time.</Text>
+          <AppText variant='body' tone='secondary'>
+            Enter the daily targets you want to track. You can change them any time.
+          </AppText>
           <GoalTargetsEditor
             initialGoals={DEFAULT_DAILY_GOALS}
             submitLabel='Save Targets'
@@ -80,17 +86,18 @@ export function OnboardingScreen() {
             secondaryAction={<AppButton label='Back' variant='secondary' onPress={() => setMode('welcome')} />}
           />
         </View>
-      </FormScreen>
+      </ScrollScreen>
     );
   }
 
   return (
-    <FormScreen title='Welcome to MacroZone'>
+    <ScrollScreen edges={['top', 'bottom']}>
+      <ScreenHeader title='Welcome to MacroZone' />
       <View style={styles.content}>
-        <Text style={styles.body}>
+        <AppText variant='body' tone='secondary'>
           Set daily calorie and macro targets so your progress means something. MacroZone can estimate targets
           from a few details, or you can enter your own.
-        </Text>
+        </AppText>
         <NoticeCard message={ESTIMATE_DISCLAIMER} />
         <View style={styles.actions}>
           <AppButton
@@ -114,20 +121,15 @@ export function OnboardingScreen() {
           />
         </View>
       </View>
-    </FormScreen>
+    </ScrollScreen>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 20,
-  },
-  body: {
-    fontSize: 16,
-    lineHeight: 23,
-    color: colors.textSecondary,
+    gap: spacing.xl,
   },
   actions: {
-    gap: 12,
+    gap: spacing.md,
   },
 });

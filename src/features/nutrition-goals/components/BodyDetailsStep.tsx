@@ -6,6 +6,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { FORMULA_SEX_LABELS, FORMULA_SEXES, UNIT_SYSTEM_LABELS, UNIT_SYSTEMS } from '@/features/profile/constants';
 import type { FormulaSex, UnitSystem } from '@/features/profile/types';
 import type { BodyProfileErrors, BodyProfileFormValues } from '@/features/profile/validation/bodyProfileForm';
+import { spacing } from '@/theme';
 
 type BodyDetailsStepProps = {
   values: BodyProfileFormValues;
@@ -131,11 +132,11 @@ export function BodyDetailsStep({ values, errors, disabled, onChange, onUnitSyst
 
 const styles = StyleSheet.create({
   container: {
-    gap: 18,
+    gap: spacing.xl,
   },
   row: {
     flexDirection: 'row',
-    gap: 10,
+    gap: spacing.md,
   },
   rowItem: {
     flex: 1,

@@ -6,6 +6,7 @@ import { WEIGHT_GOAL_DETAILS, WEIGHT_GOALS } from '@/features/profile/constants'
 import type { UnitSystem, WeightGoal } from '@/features/profile/types';
 import { getWeeklyRateOptions, isSameWeeklyRate } from '@/features/profile/utils/units';
 import type { BodyProfileErrors } from '@/features/profile/validation/bodyProfileForm';
+import { spacing } from '@/theme';
 
 type WeightGoalStepProps = {
   weightGoal: WeightGoal | null;
@@ -76,6 +77,6 @@ export function WeightGoalStep({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 18,
+    gap: spacing.xl,
   },
 });
