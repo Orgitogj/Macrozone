@@ -49,6 +49,33 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       )`,
     ],
   },
+  {
+    version: 2,
+    name: 'create_user_profile_and_nutrition_goals',
+    statements: [
+      `CREATE TABLE user_profile (
+        id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+        unit_system TEXT NOT NULL CHECK (unit_system IN ('metric', 'imperial')),
+        sex TEXT NOT NULL CHECK (sex IN ('female', 'male', 'unspecified')),
+        age_years INTEGER NOT NULL CHECK (typeof(age_years) = 'integer' AND age_years > 0),
+        height_cm REAL NOT NULL CHECK (typeof(height_cm) IN ('integer', 'real') AND height_cm > 0),
+        weight_kg REAL NOT NULL CHECK (typeof(weight_kg) IN ('integer', 'real') AND weight_kg > 0),
+        activity_level TEXT NOT NULL CHECK (activity_level IN ('sedentary', 'light', 'moderate', 'active', 'very_active')),
+        weight_goal TEXT NOT NULL CHECK (weight_goal IN ('lose', 'maintain', 'gain')),
+        weekly_rate_kg REAL NOT NULL CHECK (typeof(weekly_rate_kg) IN ('integer', 'real') AND weekly_rate_kg >= 0),
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE TABLE nutrition_goals (
+        id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+        calories REAL NOT NULL CHECK (typeof(calories) IN ('integer', 'real') AND calories >= 0),
+        protein REAL NOT NULL CHECK (typeof(protein) IN ('integer', 'real') AND protein >= 0),
+        carbs REAL NOT NULL CHECK (typeof(carbs) IN ('integer', 'real') AND carbs >= 0),
+        fat REAL NOT NULL CHECK (typeof(fat) IN ('integer', 'real') AND fat >= 0),
+        source TEXT NOT NULL CHECK (source IN ('calculated', 'manual')),
+        updated_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ];
 
 export function assertMigrationsOrdered(migrations: readonly SchemaMigration[]): void {
