@@ -10,7 +10,15 @@ The app is currently an early MVP. All data stays on the device.
 
 ## Current features
 
-- **Home (daily view):** move to the previous or next day, or jump back to today. Future dates are not selectable. Calorie, protein, carb, and fat totals for the selected day are shown against fixed goals, followed by that day's meals ordered by time eaten. "Clear Day" deletes the selected day's meals after confirmation.
+- **Onboarding (new users):** on first launch, choose to calculate personalized targets, enter targets manually, or skip for now.
+  - The calculator asks for units, the sex used by the formula (female, male, or not specified), age, height, weight, activity level, and a goal (lose, maintain, or gain) with a weekly rate.
+  - Before saving, it shows BMR, TDEE, the calorie target, macros, and an explanation of the formulas.
+  - Everything is presented as an estimate, not medical advice.
+- **Nutrition Goals:** open from the Home header at any time to review current targets and saved details, recalculate them, or edit them manually.
+- **Home (daily view):** move to the previous or next day, or jump back to today. Future dates are not selectable.
+  - Calorie, protein, carb, and fat totals for the selected day are shown against your goals, with progress bars and "left" or "over" amounts. All of this has text equivalents for screen readers.
+  - The day's meals follow, ordered by time eaten. "Clear Day" deletes the selected day's meals after confirmation.
+  - Users who already have meals but have not set goals see a dismissible "Personalize your goals" suggestion.
 - **Add Meal:** log a meal with a name, meal type (breakfast, lunch, dinner, snack), date (today or earlier), an optional time, calories, and optional protein, carbs, and fat.
   - The date is chosen with a native date picker (future dates are blocked) or with the previous/next-day and Today controls. The optional time uses a native time picker and can be cleared.
   - On Android the pickers open as system dialogs. On iOS they open in a bottom sheet with Cancel and Done. On web they use the browser's date and time inputs. Saving is disabled while a picker is open.
@@ -83,6 +91,8 @@ src/
     (tabs)/                   Home, Add Meal, All Meals tabs
     meal/[id].tsx             Edit meal
     meal/new.tsx              Duplicate meal (?duplicateOf=<id>)
+    onboarding.tsx            First-run goal setup (shown only while the onboarding gate requires it)
+    goals/                    Nutrition Goals overview, calculator (calculate.tsx), manual editor (edit.tsx)
   features/
     meals/
       components/             Presentational meal UI (form, macro grid, meal rows, history list, copy/share)
@@ -95,7 +105,16 @@ src/
       validation/mealForm.ts  Form values, validation rules and messages
       types.ts, constants.ts
       index.ts                Public API of the feature
-    nutrition-goals/          Goal types, default goals, remaining/exceeded calculations
+    nutrition-goals/
+      components/             Calculator steps, review breakdown, targets editor, goals overview, personalize card
+      hooks/                  useNutritionPlan, useGoalCalculatorFlow, useGoalTargetsForm, useGoalsNavigation
+      repositories/           NutritionPlanRepository with SQLite and AsyncStorage implementations
+      screens/                NutritionGoals, GoalCalculator, ManualGoals
+      services/               Use cases: load plan, save calculated/adjusted/manual goals, skip setup
+      utils/                  Pure logic: goal calculator, progress descriptions, calculator step reducer
+      validation/             Manual target validation and warnings
+    profile/                  Body profile types, unit conversion, profile form validation
+    onboarding/               Onboarding gate (provider and pure decision) and onboarding screen
   components/
     layout/FormScreen.tsx     Scrollable, keyboard-aware form screen
     ui/                       Shared UI: AppButton, AppTextInput, FormField, SegmentedControl, DateNavigator,
@@ -136,7 +155,7 @@ Screens → hooks/services → MealRepository → SQLite (Android, iOS) | AsyncS
 
 `getMealRepository()` is split into `getMealRepository.ts` (SQLite) and `getMealRepository.web.ts` (AsyncStorage), so web bundles never include SQLite. `expo-sqlite` web support is still in alpha and needs special hosting headers.
 
-### SQLite schema (`macrozone.db`, schema version 1)
+### SQLite schema (`macrozone.db`, schema version 2)
 
 | Table | Purpose | Key columns and constraints |
 | ----- | ------- | --------------------------- |
@@ -144,14 +163,20 @@ Screens → hooks/services → MealRepository → SQLite (Android, iOS) | AsyncS
 | `app_metadata` | App-level markers such as the legacy-import record | `key TEXT PRIMARY KEY`, `value` (valid JSON), `updated_at` |
 | `legacy_meal_records` | Raw legacy records that could not be imported as meals, kept for recovery | `source_index`, `raw_json`, `reason` (`unreadable`, `duplicate_id`, `conflict`, `unparseable_source`), `imported_at` |
 
+| `user_profile` (v2) | The one saved body profile used for goal calculation | `id` (always 1), `unit_system`, `sex` (female, male, unspecified), `age_years`, `height_cm`, `weight_kg`, `activity_level`, `weight_goal`, `weekly_rate_kg`, `updated_at` |
+| `nutrition_goals` (v2) | The current daily targets | `id` (always 1), `calories`/`protein`/`carbs`/`fat` (non-negative), `source` (calculated or manual), `updated_at` |
+
 Indexes: `(local_date, local_time, created_at)`, `(local_date, meal_type)`, and `(created_at)`.
+
+Onboarding status (`completed` or `skipped`) is stored in `app_metadata` under the key `onboarding`. Saving goals writes the profile (when calculated), goals, and status in one exclusive transaction. On web, the whole plan is one JSON value under the AsyncStorage key `nutrition_plan`.
 
 ### Schema migrations
 
 - Schema versions are tracked with `PRAGMA user_version`. Migrations are an ordered, consecutively numbered list in `src/storage/database/schemaMigrations.ts`.
 - Each migration runs in an exclusive transaction together with its version bump. A failed migration rolls back completely and leaves the previous version in place.
 - A database created by a newer app version is refused rather than modified.
-- Future data (goals, favorites, measurements, reminders) will be added as new numbered migrations in the phases that introduce those features.
+- Version 2 adds `user_profile` and `nutrition_goals` without changing existing tables.
+- Future data (favorites, measurements, reminders) will be added as new numbered migrations in the phases that introduce those features.
 
 ### Migration from AsyncStorage
 
@@ -177,6 +202,31 @@ Running the import again is safe: the marker is checked before and inside the tr
 - **Delete All** removes all rows from `meals` only. Migration-recovery records in `legacy_meal_records` and the legacy AsyncStorage backup are kept; no ordinary meal deletion (single meal, Clear Day, or Delete All) removes them.
 - **Reverting to an older build.** An app version from before this change would read the untouched AsyncStorage snapshot, which does not include meals added afterwards.
 
+## Nutrition goal calculations
+
+Targets are estimates from general population formulas. They are not medical advice. The calculator is limited to adults (18–100 years).
+
+- **BMR (Mifflin–St Jeor):** 10 × weight (kg) + 6.25 × height (cm) − 5 × age + s.
+  - s = +5 for male, −161 for female, and −78 for "not specified". The last is the midpoint of the two, and less precise.
+- **TDEE:** BMR × activity factor.
+  - Sedentary 1.2, lightly active 1.375, moderately active 1.55, very active 1.725, extra active 1.9.
+- **Calorie target:** TDEE ± weekly rate × 7,700 kcal ÷ 7, rounded to the nearest 10 kcal.
+  - Rates: lose 0.25, 0.5, 0.75, or 1 kg per week (0.5, 1, 1.5, or 2 lb); gain 0.25 or 0.5 kg per week (0.5 or 1 lb).
+  - If the result is below 1,200 kcal (female), 1,500 kcal (male), or 1,350 kcal (not specified), the target is raised to that minimum, and the review explains why.
+- **Protein:** 2.0 g per kg (lose), 1.6 (maintain), or 1.8 (gain), capped at 35% of calories.
+- **Fat:** 25% of calories, at least 0.5 g per kg, and at most 35% of calories.
+- **Carbs:** the remaining calories ÷ 4, never negative. All grams are whole numbers.
+- **Units:** stored in metric. Imperial input uses exact factors (1 in = 2.54 cm, 1 lb = 0.45359237 kg).
+- **Input limits:**
+  - Height: 120–230 cm (3 ft 11.3 in – 7 ft 6.5 in).
+  - Weight: 35–300 kg (77.2–661.3 lb), one decimal.
+- **Manual targets:**
+  - Calories: 500–10,000 kcal. Protein, carbs, and fat: 0–1,000 g, up to one decimal.
+  - Non-blocking warnings appear below 1,200 kcal, or when macro calories differ from the calorie target by more than 10%.
+- **Onboarding rules:**
+  - It opens automatically only when no goals are saved, onboarding was never completed or skipped, and no meals exist.
+  - Existing users with meals keep the default goals (2,000 kcal / 150 g / 250 g / 65 g) until they set their own.
+
 ## Testing
 
 Business logic is implemented as pure functions and unit-tested with Jest (`npm test`).
@@ -187,7 +237,8 @@ Business logic is implemented as pure functions and unit-tested with Jest (`npm 
 
 ## Current limitations
 
-- Nutrition goals are fixed defaults (2,000 kcal / 150 g protein / 250 g carbs / 65 g fat).
+- Only the current goals and body profile are stored; there is no goal or weight history yet (planned with progress tracking).
+- Changing your weight does not recalculate goals automatically; use Recalculate on the Nutrition Goals screen.
 - There are no serving sizes yet (planned together with recipes).
 - The legacy AsyncStorage copy of pre-SQLite meals is kept on the device indefinitely. Removing it will be a separate, explicitly confirmed step.
 - Raw legacy records that could not be imported are preserved, but there is no screen to review or recover them yet.
