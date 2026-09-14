@@ -49,11 +49,14 @@ const MACRO_FIELD_LABELS: Record<MacroKey, string> = {
   fat: 'Fat',
 };
 
-export function createEmptyMealFormValues(now: Date): MealFormValues {
+export function createEmptyMealFormValues(
+  now: Date,
+  preset: { date?: LocalDateKey | null; mealType?: MealType | null } = {},
+): MealFormValues {
   return {
     name: '',
-    mealType: inferMealTypeFromDate(now),
-    date: toLocalDateKey(now),
+    mealType: preset.mealType ?? inferMealTypeFromDate(now),
+    date: preset.date ?? toLocalDateKey(now),
     time: null,
     calories: '',
     protein: '',

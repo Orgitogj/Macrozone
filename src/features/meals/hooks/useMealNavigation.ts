@@ -1,5 +1,7 @@
 import { useRouter } from 'expo-router';
 
+import type { MealType } from '@/features/meals/types';
+import { buildNewMealRouteParams } from '@/features/meals/utils/mealRoutes';
 import type { LocalDateKey } from '@/utils/date';
 
 export function useMealNavigation() {
@@ -8,6 +10,9 @@ export function useMealNavigation() {
   return {
     openMeal: (id: string) => {
       router.push({ pathname: '/meal/[id]', params: { id } });
+    },
+    openNewMeal: (date: LocalDateKey, mealType: MealType) => {
+      router.push({ pathname: '/meal/new', params: buildNewMealRouteParams({ date, mealType }) });
     },
     openDuplicate: (id: string) => {
       router.push({ pathname: '/meal/new', params: { duplicateOf: id } });

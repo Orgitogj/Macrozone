@@ -1,16 +1,22 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 
 import { CreateMealScreen } from '@/features/meals';
-import { getSingleParam } from '@/utils/routeParams';
+import { parseNewMealRouteParams } from '@/features/meals/utils/mealRoutes';
+import { useTodayDateKey } from '@/hooks/useTodayDateKey';
 
 export default function NewMealRoute() {
-  const { duplicateOf } = useLocalSearchParams<{ duplicateOf?: string }>();
-  const duplicateOfId = getSingleParam(duplicateOf);
+  const params = useLocalSearchParams<{ duplicateOf?: string; date?: string; mealType?: string }>();
+  const todayKey = useTodayDateKey();
+  const route = parseNewMealRouteParams(params, todayKey);
 
   return (
     <>
-      <Stack.Screen options={{ title: duplicateOfId ? 'Duplicate Meal' : 'Add Meal' }} />
-      <CreateMealScreen duplicateOfId={duplicateOfId} />
+      <Stack.Screen options={{ title: route.duplicateOfId ? 'Duplicate Meal' : 'Add Meal' }} />
+      <CreateMealScreen
+        duplicateOfId={route.duplicateOfId}
+        presetDate={route.date}
+        presetMealType={route.mealType}
+      />
     </>
   );
 }

@@ -2,33 +2,37 @@ import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { ScrollScreen } from '@/components/layout/ScrollScreen';
 import { AppLoader } from '@/components/ui/AppLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
-import { FormScreen } from '@/components/layout/FormScreen';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { MealForm } from '@/features/meals/components/MealForm';
 import { useMeal } from '@/features/meals/hooks/useMeal';
 import { useMealForm } from '@/features/meals/hooks/useMealForm';
 import { useMealNavigation } from '@/features/meals/hooks/useMealNavigation';
 import { saveNewMeal } from '@/features/meals/services/mealActions';
-import {
-  createDuplicateFormValues,
-  createEmptyMealFormValues,
-} from '@/features/meals/validation/mealForm';
-import { getTodayDateKey } from '@/utils/date';
+import type { MealType } from '@/features/meals/types';
+import { createDuplicateFormValues, createEmptyMealFormValues } from '@/features/meals/validation/mealForm';
+import { getTodayDateKey, type LocalDateKey } from '@/utils/date';
 
 type CreateMealScreenProps = {
   title?: string;
   duplicateOfId?: string;
+  presetDate?: LocalDateKey | null;
+  presetMealType?: MealType | null;
 };
 
-export function CreateMealScreen({ title, duplicateOfId }: CreateMealScreenProps) {
+export function CreateMealScreen({ title, duplicateOfId, presetDate = null, presetMealType = null }: CreateMealScreenProps) {
   const navigation = useMealNavigation();
-  const form = useMealForm(createEmptyMealFormValues(new Date()));
+  const preset = { date: presetDate, mealType: presetMealType };
+  const form = useMealForm(createEmptyMealFormValues(new Date(), preset));
   const { state: sourceState, reload: reloadSource } = useMeal(duplicateOfId);
   const [prefilledFromId, setPrefilledFromId] = useState<string | null>(null);
 
   const isDuplicate = duplicateOfId !== undefined;
+  const hasPreset = presetDate !== null || presetMealType !== null;
   const { isDirty, isSaving, reset } = form;
+  const edges = title ? (['top'] as const) : (['bottom'] as const);
 
   useEffect(() => {
     if (isDuplicate && sourceState.status === 'ready' && prefilledFromId !== sourceState.meal.id) {
@@ -39,8 +43,8 @@ export function CreateMealScreen({ title, duplicateOfId }: CreateMealScreenProps
 
   const canRefreshOnFocus = useRef(false);
   useEffect(() => {
-    canRefreshOnFocus.current = !isDuplicate && !isDirty && !isSaving;
-  }, [isDuplicate, isDirty, isSaving]);
+    canRefreshOnFocus.current = !isDuplicate && !hasPreset && !isDirty && !isSaving;
+  }, [isDuplicate, hasPreset, isDirty, isSaving]);
 
   useFocusEffect(
     useCallback(() => {
@@ -56,28 +60,30 @@ export function CreateMealScreen({ title, duplicateOfId }: CreateMealScreenProps
       return;
     }
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    if (!isDuplicate) {
+    if (!isDuplicate && !hasPreset) {
       reset(createEmptyMealFormValues(new Date()));
     }
     navigation.showDay(result.meal.date);
   };
 
+  const header = title ? <ScreenHeader title={title} subtitle='Log what you ate' /> : null;
+
   if (isDuplicate && sourceState.status !== 'ready') {
     return (
-      <FormScreen title={title}>
+      <ScrollScreen edges={edges}>
+        {header}
         {sourceState.status === 'loading' ? <AppLoader accessibilityLabel='Loading meal' /> : null}
         {sourceState.status === 'missing' ? (
           <ErrorState message='This meal no longer exists.' onRetry={navigation.goBack} retryLabel='Go back' />
         ) : null}
-        {sourceState.status === 'error' ? (
-          <ErrorState message={sourceState.message} onRetry={reloadSource} />
-        ) : null}
-      </FormScreen>
+        {sourceState.status === 'error' ? <ErrorState message={sourceState.message} onRetry={reloadSource} /> : null}
+      </ScrollScreen>
     );
   }
 
   return (
-    <FormScreen title={title}>
+    <ScrollScreen edges={edges}>
+      {header}
       <MealForm
         values={form.values}
         errors={form.errors}
@@ -89,6 +95,6 @@ export function CreateMealScreen({ title, duplicateOfId }: CreateMealScreenProps
         onBlur={form.markTouched}
         onSubmit={handleSubmit}
       />
-    </FormScreen>
+    </ScrollScreen>
   );
 }
