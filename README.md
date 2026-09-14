@@ -15,7 +15,7 @@ The app is currently an early MVP. All data stays on the device.
   - Before saving, it shows BMR, TDEE, the calorie target, macros, and an explanation of the formulas.
   - Everything is presented as an estimate, not medical advice.
 - **Navigation:** three tabs (Home, Add, Diary). The tab bar hides while the keyboard is open.
-- **Nutrition Goals and appearance:** open from the options button in the Home header to review targets and saved details, recalculate them, edit them manually, or choose the theme.
+- **Nutrition Goals, reminders, and appearance:** open from the options button in the Home header to review targets and saved details, recalculate them, edit them manually, open meal reminders, or choose the theme.
 - **Home (daily dashboard):** move to the previous or next day, or jump back to today. Future dates are not selectable.
   - A calorie card shows calories eaten against the estimated target, with a progress bar and one status: "left", "Target reached", or "over". Protein, carbs, and fat follow as compact progress cards. Every card has a text equivalent for screen readers, and status is never shown by color alone.
   - Meals are grouped into Breakfast, Lunch, Dinner, and Snacks, each with its calorie subtotal and an "Add" button that opens the meal form preset to that meal type and the selected date. Empty sections show a short hint instead of a large empty state.
@@ -35,7 +35,11 @@ The app is currently an early MVP. All data stays on the device.
 - **Diary (history):** every logged meal, grouped by local date (newest first) with daily calorie totals and meal counts, in a virtualized list. Each day has its own "Clear Day" action. "Delete all history" is a low-emphasis action at the end of the list and asks for a separate confirmation.
 - **Copy / Share summary:** copy or share a plain-text summary of the selected day, including consumed, goal, and remaining or exceeded values for each macro.
 - **Local persistence:** on Android and iOS, meals are stored in an on-device SQLite database. On first launch after updating, meals saved by earlier versions are copied from AsyncStorage automatically. On web, meals stay in AsyncStorage (browser storage). Everything works offline.
-- **Meal reminders (not reachable in the UI yet):** code exists for daily lunch and dinner notifications, but no screen renders it.
+- **Meal reminders (Android and iOS):** open Meal reminders from the Nutrition Goals screen to set a daily local reminder for breakfast, lunch, dinner, and snacks.
+  - Each reminder has its own switch, time picker, and status (off, on, on without notification permission, or not scheduled yet), with a retry when something fails. All reminders start off, and nothing is scheduled until you turn one on.
+  - MacroZone asks for notification permission only when you turn on a reminder. If notifications are blocked, the reminder stays off and the screen explains how to allow notifications in system settings.
+  - Tapping a reminder opens Add Meal for today with that meal type selected, whether the app was open, in the background, or closed.
+  - On web, the screen explains that reminders are available in the Android and iOS apps.
 
 ## Technology stack
 
@@ -68,7 +72,7 @@ npm start
 
 In the Expo CLI, press `a` for Android, `i` for iOS, or `w` for web, or scan the QR code with Expo Go.
 
-> Note: Expo Go on Android does not support remote push notifications on SDK 53+. MacroZone only uses local scheduled reminders, but the reminders phase will check notification behavior in a [development build](https://docs.expo.dev/develop/development-builds/introduction/).
+> Note: Expo Go on Android does not support remote push notifications on SDK 53+. MacroZone only schedules local notifications, which Expo Go still supports, but notification channels, permissions, and tap handling are most reliable to verify in a [development build](https://docs.expo.dev/develop/development-builds/introduction/).
 
 ## Available commands
 
@@ -122,6 +126,16 @@ src/
       validation/             Manual target validation and warnings
     profile/                  Body profile types, unit conversion, profile form validation
     onboarding/               Onboarding gate (provider and pure decision) and onboarding screen
+    reminders/
+      components/             Reminder card, permission notice, entry card
+      hooks/                  useReminderSettings (screen state), useReminderLifecycle (tap handling, reconciliation),
+                              useReminderNavigation
+      repositories/           ReminderRepository interface and AsyncStorage implementation
+      screens/                Reminders
+      services/               Reminder use cases (enable, disable, change time, reconcile), notification platform
+                              interfaces, expo-notifications adapter, getReminderPlatform(.web).ts
+      utils/                  Pure logic: settings model and parsing, notification payloads, permission mapping,
+                              reconciliation planning, tap-to-route mapping, status text
     settings/                 Appearance (theme) settings
   theme/                      Design system: semantic light/dark palettes, spacing, radii, typography,
                               sizes, theme preference (resolution, storage), AppThemeProvider and hooks
@@ -130,14 +144,13 @@ src/
     ui/                       Shared UI: AppText, AppCard, AppButton, TextButton, IconButton, AppTextInput,
                               FormField, SegmentedControl, ChoiceList, DateNavigator, DateTimePickerField
                               (.tsx native, .web.tsx web), ProgressBar, ScreenHeader, SectionHeader,
-                              KeyValueRow, NoticeCard, StepHeader, loading/empty/error states
-    ReminderToggle.tsx        Not yet rendered (reminders phase)
+                              KeyValueRow, NoticeCard, StepHeader, AppSwitch, loading/empty/error states
   hooks/                      Cross-feature hooks: useSelectedDate, useTodayDateKey
   storage/database/           SQLite access: SqlDatabase interface, open/prepare, ordered schema migrations
   types/nutrition.ts          Shared nutrition types (MacroTotals)
   utils/                      Pure shared utilities: dates, times, date/time input conversion, number input, formatting, ids,
                               single-flight guard, serial queue, checksum, route params, async loading state,
-                              confirmation dialog
+                              device time zone, confirmation dialog
 jest.environment.js           Jest environment: pins/switches timezones, provides in-memory SQLite for tests
 assets/images/                App icon, adaptive icons, splash image, favicon
 ```
@@ -196,7 +209,7 @@ Onboarding status (`completed` or `skipped`) is stored in `app_metadata` under t
 - Each migration runs in an exclusive transaction together with its version bump. A failed migration rolls back completely and leaves the previous version in place.
 - A database created by a newer app version is refused rather than modified.
 - Version 2 adds `user_profile` and `nutrition_goals` without changing existing tables.
-- Future data (favorites, measurements, reminders) will be added as new numbered migrations in the phases that introduce those features.
+- Future data (favorites, measurements) will be added as new numbered migrations in the phases that introduce those features. Meal reminders are device settings and are stored in AsyncStorage, not SQLite.
 
 ### Migration from AsyncStorage
 
@@ -221,6 +234,50 @@ Running the import again is safe: the marker is checked before and inside the tr
 - **One setup per launch.** Database setup is cached, so concurrent screens trigger a single migration and import. A failed setup is retried on the next call.
 - **Delete All** removes all rows from `meals` only. Migration-recovery records in `legacy_meal_records` and the legacy AsyncStorage backup are kept; no ordinary meal deletion (single meal, Clear Day, or Delete All) removes them.
 - **Reverting to an older build.** An app version from before this change would read the untouched AsyncStorage snapshot, which does not include meals added afterwards.
+
+## Meal reminders
+
+### Architecture
+
+```text
+RemindersScreen → useReminderSettings → ReminderService → ReminderRepository (AsyncStorage)
+                                                        → NotificationScheduler / NotificationPermissionService (expo-notifications)
+Root layout     → useReminderLifecycle → notification taps, reconciliation
+```
+
+Screens and components never import `expo-notifications` or AsyncStorage. `getReminderPlatform.web.ts` reports reminders as unsupported, so the notification adapter is not part of the web bundle.
+
+### Stored settings
+
+- One versioned JSON value under the AsyncStorage key `meal_reminders` (`version: 1`) holds each reminder's ID (`reminder-breakfast`, …), meal type, enabled flag, hour, minute, and update time, plus device-only schedule records (OS notification ID, time, time zone, scheduled time). OS notification IDs are specific to this device and are not meant for syncing.
+- Invalid JSON, malformed or duplicate entries, and missing reminders are replaced with safe defaults and reported on screen. Before the first overwrite, the original value is copied to `meal_reminders_unreadable_backup`.
+- Settings saved by a newer app version are shown as read-only and never overwritten.
+
+### Permissions and Android channel
+
+- Permission is read without prompting. The system prompt appears only when you turn on a reminder and the system still allows asking. iOS provisional and ephemeral authorization count as allowed.
+- If permission is denied, the reminder stays off, nothing is recorded as scheduled, and an Open Settings action is offered. MacroZone does not ask again automatically.
+- Android reminders use a dedicated `meal-reminders` channel ("Meal reminders", default importance, default sound, no vibration). It is created before the permission prompt and before scheduling.
+
+### Scheduling and recovery
+
+- Each enabled reminder is its own daily notification at a local hour and minute. Its data includes `kind: 'macrozone.meal-reminder'`, a payload version, the reminder ID, meal type, and time.
+- MacroZone cancels only notifications it recorded or that carry its reminder payload. It never cancels all scheduled notifications.
+- **Turn on:** check or request permission, prepare the channel, schedule, then save. If saving fails, the new notification is cancelled.
+- **Turn off:** save the off state first, then cancel. If cancellation fails, the reminder is shown as off with a warning, and reconciliation removes the notification later.
+- **Change time:** schedule the replacement, save it, then cancel the previous notification. If scheduling or saving fails, the previous reminder stays active and any replacement is removed.
+- **Reconciliation** runs when the app becomes ready, when it returns to the foreground (only after reminders were configured), and when the Reminders screen gains focus. It reschedules enabled reminders whose notification is missing, whose time differs, or whose time zone changed; cancels MacroZone reminder notifications for disabled reminders, duplicates, and unrecognized payload versions; drops stale records; and leaves other notifications alone. It never requests permission.
+
+### Time zones and daylight saving time
+
+- Reminder times are local wall-clock times, never stored as UTC timestamps.
+- iOS repeats the reminder with a calendar trigger that follows the device's current local time.
+- Android computes the next delivery in the device's local time after each delivery, so daylight saving changes are followed. When the device time zone changes, MacroZone reschedules the next time the app opens or returns to the foreground.
+- On days when a local time does not exist (for example, during a spring-forward DST change), the platform decides whether the reminder is delivered after the gap or skipped that day.
+
+### Notification taps
+
+Tapping a valid reminder opens `/meal/new` with today's local date and the reminder's meal type. Payloads that are malformed, from an unknown version, or from other notifications are ignored. Each tap is handled once, including a tap that launched the app. Taps are processed only after onboarding is complete; a tap received during onboarding opens Add Meal once onboarding finishes in the same session.
 
 ## Nutrition goal calculations
 
@@ -264,7 +321,9 @@ Business logic is implemented as pure functions and unit-tested with Jest (`npm 
 - Raw legacy records that could not be imported are preserved, but there is no screen to review or recover them yet.
 - On web, meals are stored in AsyncStorage (browser storage), not SQLite. Web writes are serialized within one tab, but separate browser tabs are not coordinated.
 - Keyboard handling uses React Native's built-in APIs rather than a dedicated keyboard library, so behavior can differ slightly between Android versions and keyboards.
-- Reminders cannot be reached in the UI, and they cancel *all* scheduled notifications rather than only MacroZone's own.
+- Android delivers reminders with inexact alarms, because MacroZone does not request the exact-alarm permission. In battery-saving (Doze) mode, a reminder can arrive a few minutes late.
+- If notifications are blocked while reminders are on, Android keeps the scheduled notifications but does not show them, and iOS does not deliver them. Reminders resume once notifications are allowed again.
+- Reminder notification text is fixed per meal type and cannot be edited yet.
 - The theme preference is stored per device and is not synced.
 - Android date and time dialogs and confirmation alerts are drawn by the system, so they follow the device's light or dark setting rather than an explicit in-app choice.
 - If Home is left open on today past midnight, it moves to the new day the next time the screen gains focus.
@@ -280,7 +339,7 @@ Work proceeds one phase at a time:
 3. **Storage architecture:** SQLite repository layer, versioned schema migrations, safe one-time import from AsyncStorage.
 4. **Personalized goals and onboarding:** BMR/TDEE-based estimates and editable goals.
 5. **Home and diary UX:** design system, light/dark/system themes, safe areas, keyboard handling, a Home dashboard grouped by meal type, and the Diary.
-6. **Reminders and settings:** configurable, platform-correct notifications.
+6. **Reminders and settings:** configurable local meal reminders with permission handling, reconciliation, and notification-tap navigation.
 7. **Fast logging:** favorites, recent foods, saved meals, recipes, servings.
 8. **Progress tracking:** weight, body measurements, trends, charts.
 9. **Accounts and optional cloud sync:** Supabase, with offline use preserved.
