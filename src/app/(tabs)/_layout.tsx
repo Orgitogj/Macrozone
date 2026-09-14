@@ -1,44 +1,53 @@
-import { colors } from '@/styles/global';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 
+import { borderWidths, useTheme } from '@/theme';
+
 export default function TabLayout() {
+  const { colors } = useTheme();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: colors.background,
-          borderTopColor: colors.surface,
-        },
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: borderWidths.hairline,
+        },
+        sceneStyle: { backgroundColor: colors.background },
       }}
     >
       <Tabs.Screen
         name='index'
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name='home' size={size} color={color} />
+          tabBarAccessibilityLabel: 'Home, daily dashboard',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name='add-meal'
+        name='add'
         options={{
-          title: 'Add Meal',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name='add-circle' size={size} color={color} />
+          title: 'Add',
+          tabBarAccessibilityLabel: 'Add a meal',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'add-circle' : 'add-circle-outline'} size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name='meals'
+        name='diary'
         options={{
-          title: 'All Meals',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name='list' size={size} color={color} />
+          title: 'Diary',
+          tabBarAccessibilityLabel: 'Diary, meal history',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'book' : 'book-outline'} size={size} color={color} />
           ),
         }}
       />

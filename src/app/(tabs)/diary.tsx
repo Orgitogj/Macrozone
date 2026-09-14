@@ -1,5 +1,5 @@
 import { MealHistoryScreen } from '@/features/meals';
 
-export default function MealsRoute() {
+export default function DiaryRoute() {
   return <MealHistoryScreen />;
 }
