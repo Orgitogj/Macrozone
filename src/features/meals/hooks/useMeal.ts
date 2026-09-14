@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getMealErrorMessage } from '@/features/meals/services/mealActions';
-import { getMealById } from '@/features/meals/storage/mealStorage';
+import { getMealErrorMessage, loadMeal } from '@/features/meals/services/mealActions';
 import type { Meal } from '@/features/meals/types';
 
 type MealLoadState =
@@ -22,7 +21,7 @@ export function useMeal(id: string | undefined) {
     }
     setState({ status: 'loading' });
     try {
-      const meal = await getMealById(id);
+      const meal = await loadMeal(id);
       if (requestId === latestRequestId.current) {
         setState(meal ? { status: 'ready', meal } : { status: 'missing' });
       }

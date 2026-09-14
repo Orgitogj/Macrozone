@@ -9,7 +9,7 @@ import { MealForm } from '@/features/meals/components/MealForm';
 import { useMeal } from '@/features/meals/hooks/useMeal';
 import { useMealForm } from '@/features/meals/hooks/useMealForm';
 import { useMealNavigation } from '@/features/meals/hooks/useMealNavigation';
-import { addMeal } from '@/features/meals/storage/mealStorage';
+import { saveNewMeal } from '@/features/meals/services/mealActions';
 import {
   createDuplicateFormValues,
   createEmptyMealFormValues,
@@ -51,7 +51,7 @@ export function CreateMealScreen({ title, duplicateOfId }: CreateMealScreenProps
   );
 
   const handleSubmit = async () => {
-    const result = await form.submit(addMeal);
+    const result = await form.submit((input) => saveNewMeal(input));
     if (result?.status !== 'saved') {
       return;
     }

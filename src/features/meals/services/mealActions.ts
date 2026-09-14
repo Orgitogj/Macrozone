@@ -1,9 +1,8 @@
+import { getMealRepository } from '@/features/meals/repositories/getMealRepository';
 import {
-  clearAllMeals,
-  deleteMeal,
-  deleteMealsForDate,
-  MealStorageError,
-} from '@/features/meals/storage/mealStorage';
+  MealRepositoryError,
+  type MealRepository,
+} from '@/features/meals/repositories/mealRepository';
 import type { Meal, MealInput } from '@/features/meals/types';
 import {
   validateMealForm,
@@ -26,7 +25,33 @@ export type MealFormSubmitResult =
 export type DestructiveActionResult = 'completed' | 'cancelled';
 
 export function getMealErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof MealStorageError ? error.message : fallback;
+  return error instanceof MealRepositoryError ? error.message : fallback;
+}
+
+export function saveNewMeal(
+  input: MealInput,
+  repository: MealRepository = getMealRepository(),
+): Promise<Meal> {
+  return repository.createMeal(input);
+}
+
+export function saveMealChanges(
+  id: string,
+  input: MealInput,
+  repository: MealRepository = getMealRepository(),
+): Promise<Meal> {
+  return repository.updateMeal(id, input);
+}
+
+export function loadAllMeals(repository: MealRepository = getMealRepository()): Promise<Meal[]> {
+  return repository.listMeals();
+}
+
+export function loadMeal(
+  id: string,
+  repository: MealRepository = getMealRepository(),
+): Promise<Meal | null> {
+  return repository.getMealById(id);
 }
 
 export async function submitMealForm(
@@ -87,7 +112,7 @@ export async function confirmAndDeleteMeal(
   meal: Meal,
   {
     confirm = confirmDestructiveAction,
-    remove = deleteMeal,
+    remove = (id: string) => getMealRepository().deleteMeal(id),
   }: { confirm?: ConfirmAction; remove?: (id: string) => Promise<void> } = {},
 ): Promise<DestructiveActionResult> {
   if (!(await confirm(buildDeleteMealConfirmation(meal)))) {
@@ -101,7 +126,7 @@ export async function confirmAndClearDay(
   { dateKey, todayKey, mealCount }: { dateKey: LocalDateKey; todayKey: LocalDateKey; mealCount: number },
   {
     confirm = confirmDestructiveAction,
-    removeForDate = deleteMealsForDate,
+    removeForDate = (date: LocalDateKey) => getMealRepository().deleteMealsForDate(date),
   }: {
     confirm?: ConfirmAction;
     removeForDate?: (dateKey: LocalDateKey) => Promise<number>;
@@ -121,8 +146,8 @@ export async function confirmAndDeleteAllMeals(
   mealCount: number,
   {
     confirm = confirmDestructiveAction,
-    removeAll = clearAllMeals,
-  }: { confirm?: ConfirmAction; removeAll?: () => Promise<void> } = {},
+    removeAll = () => getMealRepository().deleteAllMeals(),
+  }: { confirm?: ConfirmAction; removeAll?: () => Promise<unknown> } = {},
 ): Promise<DestructiveActionResult> {
   if (mealCount === 0) {
     return 'cancelled';

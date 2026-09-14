@@ -8,9 +8,9 @@ import {
   confirmAndDeleteAllMeals,
   confirmAndDeleteMeal,
   getMealErrorMessage,
+  loadAllMeals,
   type DestructiveActionResult,
 } from '@/features/meals/services/mealActions';
-import { getMeals } from '@/features/meals/storage/mealStorage';
 import type { Meal } from '@/features/meals/types';
 import type { LocalDateKey } from '@/utils/date';
 
@@ -25,7 +25,7 @@ export function useMeals() {
   const reload = useCallback(async () => {
     const requestId = ++latestRequestId.current;
     try {
-      const data = await getMeals();
+      const data = await loadAllMeals();
       if (requestId === latestRequestId.current) {
         setMeals(data);
         setErrorMessage(null);

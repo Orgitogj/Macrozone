@@ -13,8 +13,8 @@ import { useMealNavigation } from '@/features/meals/hooks/useMealNavigation';
 import {
   confirmAndDeleteMeal,
   getMealErrorMessage,
+  saveMealChanges,
 } from '@/features/meals/services/mealActions';
-import { updateMeal } from '@/features/meals/storage/mealStorage';
 import type { Meal, MealInput } from '@/features/meals/types';
 import {
   createEmptyMealFormValues,
@@ -60,7 +60,7 @@ export function EditMealScreen({ mealId }: EditMealScreenProps) {
   const isBusy = form.isSaving || isDeleting;
 
   const handleSave = async () => {
-    const result = await form.submit((input: MealInput) => updateMeal(meal.id, input));
+    const result = await form.submit((input: MealInput) => saveMealChanges(meal.id, input));
     if (result?.status === 'saved') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
