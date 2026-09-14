@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AppButton } from '@/components/ui/AppButton';
+import { AppText } from '@/components/ui/AppText';
 import { AppTextInput } from '@/components/ui/AppTextInput';
 import { DateNavigator } from '@/components/ui/DateNavigator';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
@@ -23,7 +24,7 @@ import type {
   MealFormField,
   MealFormValues,
 } from '@/features/meals/validation/mealForm';
-import { colors } from '@/styles/global';
+import { spacing } from '@/theme';
 import { addDaysToDateKey, compareDateKeys, type LocalDateKey } from '@/utils/date';
 
 type MealFormProps = {
@@ -125,7 +126,7 @@ export function MealForm({
           canGoNext={canGoToNextDay}
           onToday={values.date === todayKey ? undefined : () => onChange('date', todayKey)}
           disabled={isSaving}
-          style={styles.dateNavigator}
+          variant='plain'
           center={
             <DateTimePickerField
               mode='date'
@@ -194,9 +195,9 @@ export function MealForm({
       </View>
 
       {saveError ? (
-        <Text style={styles.saveError} accessibilityRole='alert' accessibilityLiveRegion='assertive'>
+        <AppText variant='body' tone='danger' accessibilityRole='alert' accessibilityLiveRegion='assertive'>
           {saveError}
-        </Text>
+        </AppText>
       ) : null}
 
       <AppButton
@@ -213,17 +214,12 @@ export function MealForm({
 
 const styles = StyleSheet.create({
   form: {
-    gap: 18,
-  },
-  dateNavigator: {
-    marginTop: 0,
-    marginBottom: 0,
-    gap: 8,
+    gap: spacing.xl,
   },
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   timePicker: {
     flex: 1,
@@ -231,14 +227,10 @@ const styles = StyleSheet.create({
   macroRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: spacing.md,
   },
   macroField: {
     flexGrow: 1,
     flexBasis: 96,
-  },
-  saveError: {
-    fontSize: 14,
-    color: colors.alert,
   },
 });

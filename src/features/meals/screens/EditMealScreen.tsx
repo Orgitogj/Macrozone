@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
-import { FormScreen } from '@/components/layout/FormScreen';
+import { ScrollScreen } from '@/components/layout/ScrollScreen';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppLoader } from '@/components/ui/AppLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -20,6 +20,7 @@ import {
   createEmptyMealFormValues,
   mealToFormValues,
 } from '@/features/meals/validation/mealForm';
+import { spacing } from '@/theme';
 import { createSingleFlight } from '@/utils/singleFlight';
 
 type EditMealScreenProps = {
@@ -44,7 +45,7 @@ export function EditMealScreen({ mealId }: EditMealScreenProps) {
 
   if (state.status !== 'ready' || loadedMeal === null) {
     return (
-      <FormScreen>
+      <ScrollScreen edges={['bottom']}>
         {state.status === 'loading' || state.status === 'ready' ? (
           <AppLoader accessibilityLabel='Loading meal' />
         ) : null}
@@ -52,7 +53,7 @@ export function EditMealScreen({ mealId }: EditMealScreenProps) {
           <ErrorState message='This meal no longer exists.' onRetry={navigation.goBack} retryLabel='Go back' />
         ) : null}
         {state.status === 'error' ? <ErrorState message={state.message} onRetry={reload} /> : null}
-      </FormScreen>
+      </ScrollScreen>
     );
   }
 
@@ -83,7 +84,7 @@ export function EditMealScreen({ mealId }: EditMealScreenProps) {
     });
 
   return (
-    <FormScreen>
+    <ScrollScreen edges={['bottom']}>
       <MealForm
         values={form.values}
         errors={form.errors}
@@ -114,12 +115,12 @@ export function EditMealScreen({ mealId }: EditMealScreenProps) {
           </View>
         }
       />
-    </FormScreen>
+    </ScrollScreen>
   );
 }
 
 const styles = StyleSheet.create({
   actions: {
-    gap: 12,
+    gap: spacing.md,
   },
 });
