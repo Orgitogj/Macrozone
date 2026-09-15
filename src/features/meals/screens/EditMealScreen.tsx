@@ -6,8 +6,10 @@ import { ScrollScreen } from '@/components/layout/ScrollScreen';
 import { AppButton } from '@/components/ui/AppButton';
 import { AppLoader } from '@/components/ui/AppLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { NoticeCard } from '@/components/ui/NoticeCard';
 import { MealForm } from '@/features/meals/components/MealForm';
 import { useMeal } from '@/features/meals/hooks/useMeal';
+import { useMealEntrySource } from '@/features/meals/hooks/useMealEntrySource';
 import { useMealForm } from '@/features/meals/hooks/useMealForm';
 import { useMealNavigation } from '@/features/meals/hooks/useMealNavigation';
 import {
@@ -16,6 +18,7 @@ import {
   saveMealChanges,
 } from '@/features/meals/services/mealActions';
 import type { Meal, MealInput } from '@/features/meals/types';
+import { describeEntrySource } from '@/features/meals/utils/entrySourceText';
 import {
   createEmptyMealFormValues,
   mealToFormValues,
@@ -30,6 +33,7 @@ type EditMealScreenProps = {
 export function EditMealScreen({ mealId }: EditMealScreenProps) {
   const navigation = useMealNavigation();
   const { state, reload } = useMeal(mealId);
+  const entrySource = useMealEntrySource(mealId);
   const form = useMealForm(createEmptyMealFormValues(new Date()));
   const [loadedMeal, setLoadedMeal] = useState<Meal | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -85,6 +89,7 @@ export function EditMealScreen({ mealId }: EditMealScreenProps) {
 
   return (
     <ScrollScreen edges={['bottom']}>
+      {entrySource ? <NoticeCard message={describeEntrySource(entrySource)} style={styles.source} /> : null}
       <MealForm
         values={form.values}
         errors={form.errors}
@@ -120,6 +125,9 @@ export function EditMealScreen({ mealId }: EditMealScreenProps) {
 }
 
 const styles = StyleSheet.create({
+  source: {
+    marginBottom: spacing.xl,
+  },
   actions: {
     gap: spacing.md,
   },
