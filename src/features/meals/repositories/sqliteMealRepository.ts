@@ -144,19 +144,33 @@ export function createSqliteMealRepository(
 
     deleteMeal: (id: string) =>
       write(async (database) => {
-        await database.runAsync('DELETE FROM meals WHERE id = ?', [id]);
+        await database.withExclusiveTransactionAsync(async (transaction) => {
+          await transaction.runAsync('DELETE FROM meal_entry_sources WHERE meal_id = ?', [id]);
+          await transaction.runAsync('DELETE FROM meals WHERE id = ?', [id]);
+        });
       }),
 
     deleteMealsForDate: (date: LocalDateKey) =>
       write(async (database) => {
-        const result = await database.runAsync('DELETE FROM meals WHERE local_date = ?', [date]);
-        return result.changes;
+        let deleted = 0;
+        await database.withExclusiveTransactionAsync(async (transaction) => {
+          await transaction.runAsync(
+            'DELETE FROM meal_entry_sources WHERE meal_id IN (SELECT id FROM meals WHERE local_date = ?)',
+            [date],
+          );
+          deleted = (await transaction.runAsync('DELETE FROM meals WHERE local_date = ?', [date])).changes;
+        });
+        return deleted;
       }),
 
     deleteAllMeals: () =>
       write(async (database) => {
-        const result = await database.runAsync('DELETE FROM meals', []);
-        return result.changes;
+        let deleted = 0;
+        await database.withExclusiveTransactionAsync(async (transaction) => {
+          await transaction.runAsync('DELETE FROM meal_entry_sources', []);
+          deleted = (await transaction.runAsync('DELETE FROM meals', [])).changes;
+        });
+        return deleted;
       }),
   };
 }
