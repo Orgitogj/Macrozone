@@ -12,6 +12,7 @@ import {
 import { createSqliteMealRepository } from '@/features/meals/repositories/sqliteMealRepository';
 import { getDatabase } from '@/storage/database/openDatabase';
 import type { SqlDatabase } from '@/storage/database/types';
+import { localDataWriteQueue } from '@/storage/database/writeQueue';
 
 export function createReadyDatabaseLoader(
   openDatabase: () => Promise<SqlDatabase>,
@@ -46,7 +47,7 @@ const loadReadyDatabase = createReadyDatabaseLoader(getDatabase, () =>
   AsyncStorage.getItem(LEGACY_MEALS_STORAGE_KEY),
 );
 
-const repository = createSqliteMealRepository(loadReadyDatabase);
+const repository = createSqliteMealRepository(loadReadyDatabase, { queue: localDataWriteQueue });
 
 export function getMealRepository(): MealRepository {
   return repository;
