@@ -22,9 +22,39 @@ export type Food = FoodInput & {
   updatedAt: string;
 };
 
+export type FoodPortionInput = {
+  foodId: string | null;
+  foodName: string;
+  serving: Serving;
+  nutrition: MacroTotals;
+  amount: number;
+};
+
+export type FoodPortion = FoodPortionInput & {
+  id: string;
+};
+
+export type SavedMealInput = {
+  name: string;
+  items: FoodPortionInput[];
+};
+
+export type SavedMeal = {
+  id: string;
+  name: string;
+  items: FoodPortion[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type FoodListQuery = {
   search?: string;
   favoritesOnly?: boolean;
+  limit?: number;
+};
+
+export type LibraryListQuery = {
+  search?: string;
   limit?: number;
 };
 
