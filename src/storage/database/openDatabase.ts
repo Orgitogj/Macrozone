@@ -1,5 +1,6 @@
 import { openDatabaseAsync } from 'expo-sqlite';
 
+import { enableForeignKeys } from '@/storage/database/connection';
 import { prepareDatabase } from '@/storage/database/prepareDatabase';
 import type { SqlDatabase } from '@/storage/database/types';
 
@@ -10,11 +11,12 @@ let databasePromise: Promise<SqlDatabase> | null = null;
 export function getDatabase(): Promise<SqlDatabase> {
   if (databasePromise === null) {
     databasePromise = (async () => {
-      const database = await openDatabaseAsync(DATABASE_NAME);
+      const connection = await openDatabaseAsync(DATABASE_NAME);
       try {
-        return await prepareDatabase(database);
+        await enableForeignKeys(connection);
+        return await prepareDatabase(connection);
       } catch (error) {
-        await database.closeAsync().catch(() => undefined);
+        await connection.closeAsync().catch(() => undefined);
         throw error;
       }
     })();
