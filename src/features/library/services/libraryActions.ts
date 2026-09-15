@@ -3,9 +3,16 @@ import { getLibraryRepositories } from '@/features/library/repositories/getLibra
 import {
   LibraryRepositoryError,
   type FoodRepository,
+  type SavedMealRepository,
 } from '@/features/library/repositories/libraryRepositories';
-import type { Food, FoodListQuery } from '@/features/library/types';
+import type { Food, FoodListQuery, LibraryListQuery, SavedMeal } from '@/features/library/types';
+import {
+  validateSavedMealForm,
+  type CollectionFormErrors,
+  type SavedMealFormValues,
+} from '@/features/library/validation/collectionForms';
 import { validateFoodForm, type FoodFormErrors, type FoodFormValues } from '@/features/library/validation/foodForm';
+import { buildCopyName } from '@/features/library/utils/libraryRecords';
 import { compareCodePoints, toNameKey } from '@/features/library/utils/librarySearch';
 import type { DiaryLogRepository } from '@/features/meals/repositories/diaryLogRepository';
 import { getDiaryLogRepository } from '@/features/meals/repositories/getDiaryLogRepository';
@@ -49,10 +56,12 @@ export function buildDeleteFoodMessage(food: Food, references: { savedMeals: num
 
 export function createLibraryService({
   foods,
+  savedMeals,
   diary,
   confirm = confirmDestructiveAction,
 }: {
   foods: FoodRepository;
+  savedMeals: SavedMealRepository;
   diary: DiaryLogRepository;
   confirm?: ConfirmAction;
 }) {
@@ -70,7 +79,9 @@ export function createLibraryService({
 
   return {
     listFoods: (query: FoodListQuery) => foods.listFoods(query),
+    listSavedMeals: (query: LibraryListQuery) => savedMeals.listSavedMeals(query),
     getFood: (id: string) => foods.getFood(id),
+    getSavedMeal: (id: string) => savedMeals.getSavedMeal(id),
 
     listRecentFoods: async (limit: number = LIBRARY_LIMITS.recentLimit): Promise<RecentFood[]> => {
       const usage = await diary.listRecentFoodUsage(limit);
@@ -127,6 +138,37 @@ export function createLibraryService({
         'Could not delete this food. Please try again.',
       );
     },
+
+    saveSavedMeal: async (
+      values: SavedMealFormValues,
+      existingId: string | null,
+    ): Promise<FormSubmitResult<SavedMeal, CollectionFormErrors>> => {
+      const validation = validateSavedMealForm(values);
+      if (!validation.ok) {
+        return { status: 'invalid', errors: validation.errors };
+      }
+      try {
+        const saved = existingId
+          ? await savedMeals.updateSavedMeal(existingId, validation.input)
+          : await savedMeals.createSavedMeal(validation.input);
+        return { status: 'saved', value: saved };
+      } catch (error) {
+        return { status: 'failed', message: getLibraryErrorMessage(error, 'Could not save this saved meal. Please try again.') };
+      }
+    },
+
+    duplicateSavedMeal: (savedMeal: SavedMeal) => savedMeals.duplicateSavedMeal(savedMeal.id, buildCopyName(savedMeal.name)),
+
+    deleteSavedMeal: (savedMeal: SavedMeal): Promise<DeleteResult> =>
+      runDelete(
+        {
+          title: 'Delete Saved Meal',
+          message: `Delete "${savedMeal.name}"? Meals you already logged from it are not changed.`,
+          confirmLabel: 'Delete',
+        },
+        () => savedMeals.deleteSavedMeal(savedMeal.id),
+        'Could not delete this saved meal. Please try again.',
+      ),
   };
 }
 
