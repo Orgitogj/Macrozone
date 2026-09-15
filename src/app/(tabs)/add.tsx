@@ -1,5 +1,5 @@
-import { CreateMealScreen } from '@/features/meals';
+import { AddFoodScreen } from '@/features/meals';
 
 export default function AddRoute() {
-  return <CreateMealScreen title='Add Meal' />;
+  return <AddFoodScreen title='Add' />;
 }
