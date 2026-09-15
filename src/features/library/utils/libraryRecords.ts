@@ -2,7 +2,12 @@ import { LIBRARY_LIMITS } from '@/features/library/constants';
 import type {
   Food,
   FoodInput,
+  FoodPortion,
+  FoodPortionInput,
+  SavedMeal,
+  SavedMealInput,
 } from '@/features/library/types';
+import { validatePortionInput } from '@/features/library/validation/portions';
 import { normalizeLibraryName, toNameKey } from '@/features/library/utils/librarySearch';
 import { isServingUnit } from '@/features/library/utils/servingFormat';
 import { MACRO_KEYS, type MacroTotals } from '@/types/nutrition';
@@ -50,6 +55,15 @@ export function isValidFoodInput(input: FoodInput): boolean {
   );
 }
 
+export function isValidSavedMealInput(input: SavedMealInput): boolean {
+  return (
+    isValidName(input.name) &&
+    input.items.length > 0 &&
+    input.items.length <= LIBRARY_LIMITS.maxSavedMealItems &&
+    input.items.every(validatePortionInput)
+  );
+}
+
 export function parseFoodRecord(value: unknown): Food | null {
   if (!isRecord(value) || !isRecord(value.serving)) {
     return null;
@@ -76,6 +90,56 @@ export function parseFoodRecord(value: unknown): Food | null {
   return { ...input, id, isFavorite, favoritedAt: isFavorite ? (favoritedAt as string) : null, createdAt, updatedAt };
 }
 
+export function parsePortionRecord(value: unknown): FoodPortion | null {
+  if (!isRecord(value) || !isRecord(value.serving)) {
+    return null;
+  }
+  const { id, foodId, foodName, serving, nutrition, amount } = value;
+  const parsedNutrition = parseNutrition(nutrition, true);
+  if (
+    !isId(id) ||
+    !(foodId === null || isId(foodId)) ||
+    typeof foodName !== 'string' ||
+    typeof serving.amount !== 'number' ||
+    !isServingUnit(serving.unit) ||
+    parsedNutrition === null ||
+    typeof amount !== 'number'
+  ) {
+    return null;
+  }
+  const portion: FoodPortionInput = {
+    foodId,
+    foodName,
+    serving: { amount: serving.amount, unit: serving.unit },
+    nutrition: parsedNutrition,
+    amount,
+  };
+  return validatePortionInput(portion) ? { ...portion, id } : null;
+}
+
+function parsePortionList(value: unknown, max: number): FoodPortion[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > max) {
+    return null;
+  }
+  const portions = value.map(parsePortionRecord);
+  const ids = new Set(portions.map((portion) => portion?.id));
+  return portions.every((portion): portion is FoodPortion => portion !== null) && ids.size === portions.length
+    ? portions
+    : null;
+}
+
+export function parseSavedMealRecord(value: unknown): SavedMeal | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const { id, name, items, createdAt, updatedAt } = value;
+  const parsedItems = parsePortionList(items, LIBRARY_LIMITS.maxSavedMealItems);
+  if (!isId(id) || !isValidName(name) || parsedItems === null || !isTimestamp(createdAt) || !isTimestamp(updatedAt)) {
+    return null;
+  }
+  return { id, name, items: parsedItems, createdAt, updatedAt };
+}
+
 export function isSameFoodDefinition(a: FoodInput, b: FoodInput): boolean {
   return (
     toNameKey(a.name) === toNameKey(b.name) &&
@@ -83,4 +147,10 @@ export function isSameFoodDefinition(a: FoodInput, b: FoodInput): boolean {
     a.serving.amount === b.serving.amount &&
     MACRO_KEYS.every((key) => a.nutrition[key] === b.nutrition[key])
   );
+}
+
+export function buildCopyName(name: string): string {
+  const suffix = ' (copy)';
+  const base = name.slice(0, LIBRARY_LIMITS.nameMaxLength - suffix.length).trimEnd();
+  return `${base}${suffix}`;
 }
