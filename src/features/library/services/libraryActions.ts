@@ -3,12 +3,15 @@ import { getLibraryRepositories } from '@/features/library/repositories/getLibra
 import {
   LibraryRepositoryError,
   type FoodRepository,
+  type RecipeRepository,
   type SavedMealRepository,
 } from '@/features/library/repositories/libraryRepositories';
-import type { Food, FoodListQuery, LibraryListQuery, SavedMeal } from '@/features/library/types';
+import type { Food, FoodListQuery, LibraryListQuery, Recipe, SavedMeal } from '@/features/library/types';
 import {
+  validateRecipeForm,
   validateSavedMealForm,
   type CollectionFormErrors,
+  type RecipeFormValues,
   type SavedMealFormValues,
 } from '@/features/library/validation/collectionForms';
 import { validateFoodForm, type FoodFormErrors, type FoodFormValues } from '@/features/library/validation/foodForm';
@@ -57,11 +60,13 @@ export function buildDeleteFoodMessage(food: Food, references: { savedMeals: num
 export function createLibraryService({
   foods,
   savedMeals,
+  recipes,
   diary,
   confirm = confirmDestructiveAction,
 }: {
   foods: FoodRepository;
   savedMeals: SavedMealRepository;
+  recipes: RecipeRepository;
   diary: DiaryLogRepository;
   confirm?: ConfirmAction;
 }) {
@@ -80,8 +85,10 @@ export function createLibraryService({
   return {
     listFoods: (query: FoodListQuery) => foods.listFoods(query),
     listSavedMeals: (query: LibraryListQuery) => savedMeals.listSavedMeals(query),
+    listRecipes: (query: LibraryListQuery) => recipes.listRecipes(query),
     getFood: (id: string) => foods.getFood(id),
     getSavedMeal: (id: string) => savedMeals.getSavedMeal(id),
+    getRecipe: (id: string) => recipes.getRecipe(id),
 
     listRecentFoods: async (limit: number = LIBRARY_LIMITS.recentLimit): Promise<RecentFood[]> => {
       const usage = await diary.listRecentFoodUsage(limit);
@@ -168,6 +175,34 @@ export function createLibraryService({
         },
         () => savedMeals.deleteSavedMeal(savedMeal.id),
         'Could not delete this saved meal. Please try again.',
+      ),
+
+    saveRecipe: async (values: RecipeFormValues, existingId: string | null): Promise<FormSubmitResult<Recipe, CollectionFormErrors>> => {
+      const validation = validateRecipeForm(values);
+      if (!validation.ok) {
+        return { status: 'invalid', errors: validation.errors };
+      }
+      try {
+        const saved = existingId
+          ? await recipes.updateRecipe(existingId, validation.input)
+          : await recipes.createRecipe(validation.input);
+        return { status: 'saved', value: saved };
+      } catch (error) {
+        return { status: 'failed', message: getLibraryErrorMessage(error, 'Could not save this recipe. Please try again.') };
+      }
+    },
+
+    duplicateRecipe: (recipe: Recipe) => recipes.duplicateRecipe(recipe.id, buildCopyName(recipe.name)),
+
+    deleteRecipe: (recipe: Recipe): Promise<DeleteResult> =>
+      runDelete(
+        {
+          title: 'Delete Recipe',
+          message: `Delete "${recipe.name}"? Meals you already logged from it are not changed.`,
+          confirmLabel: 'Delete',
+        },
+        () => recipes.deleteRecipe(recipe.id),
+        'Could not delete this recipe. Please try again.',
       ),
   };
 }
