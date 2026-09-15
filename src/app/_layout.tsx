@@ -43,6 +43,15 @@ function RootNavigator() {
         <Stack.Screen name='goals/calculate' options={{ ...detailScreenOptions, title: 'Calculate Goals' }} />
         <Stack.Screen name='goals/edit' options={{ ...detailScreenOptions, title: 'Edit Goals' }} />
         <Stack.Screen name='reminders' options={{ ...detailScreenOptions, title: 'Meal Reminders' }} />
+        <Stack.Screen name='food/new' options={{ ...detailScreenOptions, title: 'New Food' }} />
+        <Stack.Screen name='food/[id]/index' options={{ ...detailScreenOptions, title: 'Food' }} />
+        <Stack.Screen name='food/[id]/edit' options={{ ...detailScreenOptions, title: 'Edit Food' }} />
+        <Stack.Screen name='saved-meal/new' options={{ ...detailScreenOptions, title: 'New Saved Meal' }} />
+        <Stack.Screen name='saved-meal/[id]/index' options={{ ...detailScreenOptions, title: 'Saved Meal' }} />
+        <Stack.Screen name='saved-meal/[id]/edit' options={{ ...detailScreenOptions, title: 'Edit Saved Meal' }} />
+        <Stack.Screen name='recipe/new' options={{ ...detailScreenOptions, title: 'New Recipe' }} />
+        <Stack.Screen name='recipe/[id]/index' options={{ ...detailScreenOptions, title: 'Recipe' }} />
+        <Stack.Screen name='recipe/[id]/edit' options={{ ...detailScreenOptions, title: 'Edit Recipe' }} />
       </Stack.Protected>
     </Stack>
   );
