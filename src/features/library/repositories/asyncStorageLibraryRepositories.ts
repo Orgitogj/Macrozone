@@ -6,12 +6,14 @@ import {
   notFoundError,
   toLibraryRepositoryError,
   type FoodRepository,
+  type RecipeRepository,
   type SavedMealRepository,
 } from '@/features/library/repositories/libraryRepositories';
 import type { Food, FoodPortion, FoodPortionInput, Recipe, SavedMeal } from '@/features/library/types';
 import {
   isSameFoodDefinition,
   isValidFoodInput,
+  isValidRecipeInput,
   isValidSavedMealInput,
   parseFoodRecord,
   parseRecipeRecord,
@@ -183,7 +185,7 @@ function detachFood(portions: readonly FoodPortion[], foodId: string): FoodPorti
 export function createAsyncStorageLibraryRepositories(
   store: AsyncStorageLibraryStore,
   { generateId = createId, now = () => new Date() }: RepositoryOptions = {},
-): { foods: FoodRepository; savedMeals: SavedMealRepository } {
+): { foods: FoodRepository; savedMeals: SavedMealRepository; recipes: RecipeRepository } {
   const newId = idGenerator(generateId);
   const invalid = () => new LibraryRepositoryError('invalid_data', LIBRARY_MESSAGES.invalidData);
 
@@ -342,5 +344,80 @@ export function createAsyncStorageLibraryRepositories(
       })),
   };
 
-  return { foods, savedMeals };
+  const recipes: RecipeRepository = {
+    listRecipes: async ({ search, limit = LIBRARY_LIMITS.listLimit }) =>
+      (await store.read()).recipes
+        .filter((recipe) => matchesNameSearch(toNameKey(recipe.name), search))
+        .sort(compareByNameThenId)
+        .slice(0, limit),
+
+    getRecipe: async (id) => (await store.read()).recipes.find((recipe) => recipe.id === id) ?? null,
+
+    createRecipe: (input) => {
+      if (!isValidRecipeInput(input)) {
+        return Promise.reject(invalid());
+      }
+      return store.update((state) => {
+        const timestamp = now().toISOString();
+        const recipe: Recipe = {
+          id: newId(),
+          name: input.name,
+          servings: input.servings,
+          ingredients: withPortionIds(input.ingredients, state.foods, newId),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        return { state: { ...state, recipes: [...state.recipes, recipe] }, result: recipe };
+      });
+    },
+
+    updateRecipe: (id, input) => {
+      if (!isValidRecipeInput(input)) {
+        return Promise.reject(invalid());
+      }
+      return store.update((state) => {
+        const current = state.recipes.find((recipe) => recipe.id === id);
+        if (!current) {
+          throw notFoundError();
+        }
+        const updated: Recipe = {
+          ...current,
+          name: input.name,
+          servings: input.servings,
+          ingredients: withPortionIds(input.ingredients, state.foods, newId),
+          updatedAt: now().toISOString(),
+        };
+        return {
+          state: { ...state, recipes: state.recipes.map((recipe) => (recipe.id === id ? updated : recipe)) },
+          result: updated,
+        };
+      });
+    },
+
+    duplicateRecipe: (id, name) =>
+      store.update((state) => {
+        const source = state.recipes.find((recipe) => recipe.id === id);
+        if (!source) {
+          throw notFoundError();
+        }
+        const timestamp = now().toISOString();
+        const copy: Recipe = {
+          id: newId(),
+          name: normalizeLibraryName(name),
+          servings: source.servings,
+          ingredients: withPortionIds(source.ingredients, state.foods, newId),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        return { state: { ...state, recipes: [...state.recipes, copy] }, result: copy };
+      }),
+
+    deleteRecipe: (id) =>
+      store.update((state) => ({
+        state: { ...state, recipes: state.recipes.filter((recipe) => recipe.id !== id) },
+        result: undefined,
+      })),
+  };
+
+  return { foods, savedMeals, recipes };
 }

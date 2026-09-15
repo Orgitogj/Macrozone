@@ -2,6 +2,7 @@ import { LIBRARY_LIMITS, LIBRARY_MESSAGES } from '@/features/library/constants';
 import {
   LibraryRepositoryError,
   notFoundError,
+  type RecipeRepository,
   type SavedMealRepository,
 } from '@/features/library/repositories/libraryRepositories';
 import {
@@ -9,12 +10,15 @@ import {
   createSqliteAccess,
   insertPortions,
   loadPortions,
+  RECIPE_INGREDIENTS_TABLE,
   SAVED_MEAL_ITEMS_TABLE,
   type SqliteLibraryOptions,
 } from '@/features/library/repositories/sqliteLibrarySupport';
-import type { FoodPortionInput, SavedMeal } from '@/features/library/types';
+import type { FoodPortionInput, Recipe, SavedMeal } from '@/features/library/types';
 import {
+  isValidRecipeInput,
   isValidSavedMealInput,
+  parseRecipeRecord,
   parseSavedMealRecord,
 } from '@/features/library/utils/libraryRecords';
 import { buildContainsPattern, normalizeLibraryName, toNameKey } from '@/features/library/utils/librarySearch';
@@ -22,6 +26,8 @@ import type { SqlDatabase, SqlExecutor, SqlValue } from '@/storage/database/type
 import { createSerialQueue } from '@/utils/serialQueue';
 
 type SavedMealRow = { id: string; name: string; created_at: string; updated_at: string };
+
+type RecipeRow = SavedMealRow & { servings: number };
 
 function invalidData(): LibraryRepositoryError {
   return new LibraryRepositoryError('invalid_data', LIBRARY_MESSAGES.invalidData);
@@ -50,6 +56,21 @@ async function loadSavedMeals(executor: SqlExecutor, rows: readonly SavedMealRow
       updatedAt: row.updated_at,
     });
     return savedMeal ? [savedMeal] : [];
+  });
+}
+
+async function loadRecipes(executor: SqlExecutor, rows: readonly RecipeRow[]): Promise<Recipe[]> {
+  const ingredients = await loadPortions(executor, RECIPE_INGREDIENTS_TABLE, rows.map((row) => row.id));
+  return rows.flatMap((row) => {
+    const recipe = parseRecipeRecord({
+      id: row.id,
+      name: row.name,
+      servings: row.servings,
+      ingredients: ingredients.get(row.id) ?? [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    });
+    return recipe ? [recipe] : [];
   });
 }
 
@@ -157,6 +178,123 @@ export function createSqliteSavedMealRepository(
           await transaction.runAsync('UPDATE meal_entry_sources SET saved_meal_id = NULL WHERE saved_meal_id = ?', [id]);
           await transaction.runAsync('DELETE FROM saved_meal_items WHERE saved_meal_id = ?', [id]);
           await transaction.runAsync('DELETE FROM saved_meals WHERE id = ?', [id]);
+        });
+      }),
+  };
+}
+
+export function createSqliteRecipeRepository(
+  getDatabase: () => Promise<SqlDatabase>,
+  { queue = createSerialQueue(), generateId, now = () => new Date() }: SqliteLibraryOptions = {},
+): RecipeRepository {
+  const { read, write } = createSqliteAccess(getDatabase, queue);
+  const newId = createIdGenerator(generateId);
+  const columns = 'id, name, servings, created_at, updated_at';
+
+  const selectOne = async (executor: SqlExecutor, id: string): Promise<Recipe | null> => {
+    const row = await executor.getFirstAsync<RecipeRow>(`SELECT ${columns} FROM recipes WHERE id = ?`, [id]);
+    return row ? ((await loadRecipes(executor, [row]))[0] ?? null) : null;
+  };
+
+  const insertNew = async (
+    executor: SqlExecutor,
+    name: string,
+    servings: number,
+    ingredients: readonly FoodPortionInput[],
+    timestamp: string,
+  ): Promise<Recipe> => {
+    const id = newId();
+    await executor.runAsync(
+      'INSERT INTO recipes (id, name, name_key, servings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, name, toNameKey(name), servings, timestamp, timestamp],
+    );
+    const inserted = await insertPortions(executor, RECIPE_INGREDIENTS_TABLE, id, ingredients, newId);
+    return { id, name, servings, ingredients: inserted, createdAt: timestamp, updatedAt: timestamp };
+  };
+
+  return {
+    listRecipes: ({ search, limit = LIBRARY_LIMITS.listLimit }) =>
+      read(async (database) => {
+        const { sql, params } = listSql('recipes', columns, search, limit);
+        return loadRecipes(database, await database.getAllAsync<RecipeRow>(sql, params));
+      }),
+
+    getRecipe: (id) => read((database) => selectOne(database, id)),
+
+    createRecipe: (input) => {
+      if (!isValidRecipeInput(input)) {
+        return Promise.reject(invalidData());
+      }
+      return write(async (database) => {
+        let created: Recipe | null = null;
+        await database.withExclusiveTransactionAsync(async (transaction) => {
+          created = await insertNew(
+            transaction,
+            input.name,
+            input.servings,
+            input.ingredients,
+            now().toISOString(),
+          );
+        });
+        if (created === null) {
+          throw invalidData();
+        }
+        return created;
+      });
+    },
+
+    updateRecipe: (id, input) => {
+      if (!isValidRecipeInput(input)) {
+        return Promise.reject(invalidData());
+      }
+      return write(async (database) => {
+        let updated: Recipe | null = null;
+        await database.withExclusiveTransactionAsync(async (transaction) => {
+          const current = await selectOne(transaction, id);
+          if (!current) {
+            throw notFoundError();
+          }
+          const timestamp = now().toISOString();
+          await transaction.runAsync('UPDATE recipes SET name = ?, name_key = ?, servings = ?, updated_at = ? WHERE id = ?', [
+            input.name,
+            toNameKey(input.name),
+            input.servings,
+            timestamp,
+            id,
+          ]);
+          await transaction.runAsync('DELETE FROM recipe_ingredients WHERE recipe_id = ?', [id]);
+          const ingredients = await insertPortions(transaction, RECIPE_INGREDIENTS_TABLE, id, input.ingredients, newId);
+          updated = { ...current, name: input.name, servings: input.servings, ingredients, updatedAt: timestamp };
+        });
+        if (updated === null) {
+          throw notFoundError();
+        }
+        return updated;
+      });
+    },
+
+    duplicateRecipe: (id, name) =>
+      write(async (database) => {
+        let created: Recipe | null = null;
+        await database.withExclusiveTransactionAsync(async (transaction) => {
+          const source = await selectOne(transaction, id);
+          if (!source) {
+            throw notFoundError();
+          }
+          created = await insertNew(transaction, normalizeLibraryName(name), source.servings, source.ingredients, now().toISOString());
+        });
+        if (created === null) {
+          throw notFoundError();
+        }
+        return created;
+      }),
+
+    deleteRecipe: (id) =>
+      write(async (database) => {
+        await database.withExclusiveTransactionAsync(async (transaction) => {
+          await transaction.runAsync('UPDATE meal_entry_sources SET recipe_id = NULL WHERE recipe_id = ?', [id]);
+          await transaction.runAsync('DELETE FROM recipe_ingredients WHERE recipe_id = ?', [id]);
+          await transaction.runAsync('DELETE FROM recipes WHERE id = ?', [id]);
         });
       }),
   };

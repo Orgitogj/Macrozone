@@ -5,6 +5,8 @@ import type {
   FoodListQuery,
   FoodReferenceCounts,
   LibraryListQuery,
+  Recipe,
+  RecipeInput,
   SavedMeal,
   SavedMealInput,
 } from '@/features/library/types';
@@ -58,4 +60,13 @@ export type SavedMealRepository = {
   updateSavedMeal(id: string, input: SavedMealInput): Promise<SavedMeal>;
   duplicateSavedMeal(id: string, name: string): Promise<SavedMeal>;
   deleteSavedMeal(id: string): Promise<void>;
+};
+
+export type RecipeRepository = {
+  listRecipes(query: LibraryListQuery): Promise<Recipe[]>;
+  getRecipe(id: string): Promise<Recipe | null>;
+  createRecipe(input: RecipeInput): Promise<Recipe>;
+  updateRecipe(id: string, input: RecipeInput): Promise<Recipe>;
+  duplicateRecipe(id: string, name: string): Promise<Recipe>;
+  deleteRecipe(id: string): Promise<void>;
 };

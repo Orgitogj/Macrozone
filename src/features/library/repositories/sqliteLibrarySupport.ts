@@ -22,6 +22,8 @@ export type PortionTable = {
 
 export const SAVED_MEAL_ITEMS_TABLE: PortionTable = { table: 'saved_meal_items', parentColumn: 'saved_meal_id' };
 
+export const RECIPE_INGREDIENTS_TABLE: PortionTable = { table: 'recipe_ingredients', parentColumn: 'recipe_id' };
+
 type PortionRow = {
   id: string;
   parent_id: string;
