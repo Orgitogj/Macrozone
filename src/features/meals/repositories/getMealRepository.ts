@@ -43,11 +43,11 @@ export function createReadyDatabaseLoader(
   };
 }
 
-const loadReadyDatabase = createReadyDatabaseLoader(getDatabase, () =>
+export const loadReadyMealDatabase = createReadyDatabaseLoader(getDatabase, () =>
   AsyncStorage.getItem(LEGACY_MEALS_STORAGE_KEY),
 );
 
-const repository = createSqliteMealRepository(loadReadyDatabase, { queue: localDataWriteQueue });
+const repository = createSqliteMealRepository(loadReadyMealDatabase, { queue: localDataWriteQueue });
 
 export function getMealRepository(): MealRepository {
   return repository;
