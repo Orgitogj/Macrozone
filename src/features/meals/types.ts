@@ -1,3 +1,4 @@
+import type { Serving } from '@/features/library/types';
 import type { MEAL_TYPES } from '@/features/meals/constants';
 import type {
   DailyNutritionGoals,
@@ -34,4 +35,37 @@ export type DailyMealSummary = {
   totals: MacroTotals;
   goals: DailyNutritionGoals;
   goalProgress: MacroGoalBreakdown;
+};
+
+export type MealEntrySourceType = 'food' | 'recipe';
+
+export type MealEntrySource = {
+  sourceType: MealEntrySourceType;
+  foodId: string | null;
+  recipeId: string | null;
+  savedMealId: string | null;
+  logGroupId: string | null;
+  sourceName: string;
+  serving: Serving;
+  baseNutrition: MacroTotals;
+  amount: number;
+  loggedAt: string;
+};
+
+export type NewDiaryEntry = {
+  input: MealInput;
+  source: Omit<MealEntrySource, 'loggedAt' | 'logGroupId'>;
+};
+
+export type RecentFoodUsage = {
+  foodId: string;
+  lastLoggedAt: string;
+  lastAmount: number;
+  lastServingUnit: Serving['unit'];
+};
+
+export type CopyMealEntriesRequest = {
+  sourceDate: LocalDateKey;
+  destinationDate: LocalDateKey;
+  mealType: MealType | null;
 };
