@@ -4,6 +4,8 @@ import type {
   FoodInput,
   FoodPortion,
   FoodPortionInput,
+  Recipe,
+  RecipeInput,
   SavedMeal,
   SavedMealInput,
 } from '@/features/library/types';
@@ -61,6 +63,18 @@ export function isValidSavedMealInput(input: SavedMealInput): boolean {
     input.items.length > 0 &&
     input.items.length <= LIBRARY_LIMITS.maxSavedMealItems &&
     input.items.every(validatePortionInput)
+  );
+}
+
+export function isValidRecipeInput(input: RecipeInput): boolean {
+  return (
+    isValidName(input.name) &&
+    Number.isFinite(input.servings) &&
+    input.servings > 0 &&
+    input.servings <= LIBRARY_LIMITS.maxRecipeServings &&
+    input.ingredients.length > 0 &&
+    input.ingredients.length <= LIBRARY_LIMITS.maxRecipeIngredients &&
+    input.ingredients.every(validatePortionInput)
   );
 }
 
@@ -138,6 +152,28 @@ export function parseSavedMealRecord(value: unknown): SavedMeal | null {
     return null;
   }
   return { id, name, items: parsedItems, createdAt, updatedAt };
+}
+
+export function parseRecipeRecord(value: unknown): Recipe | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const { id, name, servings, ingredients, createdAt, updatedAt } = value;
+  const parsedIngredients = parsePortionList(ingredients, LIBRARY_LIMITS.maxRecipeIngredients);
+  if (
+    !isId(id) ||
+    !isValidName(name) ||
+    typeof servings !== 'number' ||
+    !Number.isFinite(servings) ||
+    servings <= 0 ||
+    servings > LIBRARY_LIMITS.maxRecipeServings ||
+    parsedIngredients === null ||
+    !isTimestamp(createdAt) ||
+    !isTimestamp(updatedAt)
+  ) {
+    return null;
+  }
+  return { id, name, servings, ingredients: parsedIngredients, createdAt, updatedAt };
 }
 
 export function isSameFoodDefinition(a: FoodInput, b: FoodInput): boolean {
