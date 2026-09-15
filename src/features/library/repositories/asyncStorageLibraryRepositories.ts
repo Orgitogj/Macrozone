@@ -6,11 +6,13 @@ import {
   notFoundError,
   toLibraryRepositoryError,
   type FoodRepository,
+  type SavedMealRepository,
 } from '@/features/library/repositories/libraryRepositories';
-import type { Food, FoodPortion, Recipe, SavedMeal } from '@/features/library/types';
+import type { Food, FoodPortion, FoodPortionInput, Recipe, SavedMeal } from '@/features/library/types';
 import {
   isSameFoodDefinition,
   isValidFoodInput,
+  isValidSavedMealInput,
   parseFoodRecord,
   parseRecipeRecord,
   parseSavedMealRecord,
@@ -18,6 +20,7 @@ import {
 import {
   compareByNameThenId,
   matchesNameSearch,
+  normalizeLibraryName,
   toNameKey,
 } from '@/features/library/utils/librarySearch';
 import { createId } from '@/utils/id';
@@ -161,6 +164,18 @@ function idGenerator(generateId: () => string) {
   };
 }
 
+function withPortionIds(portions: readonly FoodPortionInput[], foods: readonly Food[], newId: () => string): FoodPortion[] {
+  const foodIds = new Set(foods.map((food) => food.id));
+  return portions.map((portion) => ({
+    id: newId(),
+    foodId: portion.foodId !== null && foodIds.has(portion.foodId) ? portion.foodId : null,
+    foodName: portion.foodName,
+    serving: { ...portion.serving },
+    nutrition: { ...portion.nutrition },
+    amount: portion.amount,
+  }));
+}
+
 function detachFood(portions: readonly FoodPortion[], foodId: string): FoodPortion[] {
   return portions.map((portion) => (portion.foodId === foodId ? { ...portion, foodId: null } : portion));
 }
@@ -168,7 +183,7 @@ function detachFood(portions: readonly FoodPortion[], foodId: string): FoodPorti
 export function createAsyncStorageLibraryRepositories(
   store: AsyncStorageLibraryStore,
   { generateId = createId, now = () => new Date() }: RepositoryOptions = {},
-): { foods: FoodRepository } {
+): { foods: FoodRepository; savedMeals: SavedMealRepository } {
   const newId = idGenerator(generateId);
   const invalid = () => new LibraryRepositoryError('invalid_data', LIBRARY_MESSAGES.invalidData);
 
@@ -255,5 +270,77 @@ export function createAsyncStorageLibraryRepositories(
       })),
   };
 
-  return { foods };
+  const savedMeals: SavedMealRepository = {
+    listSavedMeals: async ({ search, limit = LIBRARY_LIMITS.listLimit }) =>
+      (await store.read()).savedMeals
+        .filter((meal) => matchesNameSearch(toNameKey(meal.name), search))
+        .sort(compareByNameThenId)
+        .slice(0, limit),
+
+    getSavedMeal: async (id) => (await store.read()).savedMeals.find((meal) => meal.id === id) ?? null,
+
+    createSavedMeal: (input) => {
+      if (!isValidSavedMealInput(input)) {
+        return Promise.reject(invalid());
+      }
+      return store.update((state) => {
+        const timestamp = now().toISOString();
+        const savedMeal: SavedMeal = {
+          id: newId(),
+          name: input.name,
+          items: withPortionIds(input.items, state.foods, newId),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        return { state: { ...state, savedMeals: [...state.savedMeals, savedMeal] }, result: savedMeal };
+      });
+    },
+
+    updateSavedMeal: (id, input) => {
+      if (!isValidSavedMealInput(input)) {
+        return Promise.reject(invalid());
+      }
+      return store.update((state) => {
+        const current = state.savedMeals.find((meal) => meal.id === id);
+        if (!current) {
+          throw notFoundError();
+        }
+        const updated: SavedMeal = {
+          ...current,
+          name: input.name,
+          items: withPortionIds(input.items, state.foods, newId),
+          updatedAt: now().toISOString(),
+        };
+        return {
+          state: { ...state, savedMeals: state.savedMeals.map((meal) => (meal.id === id ? updated : meal)) },
+          result: updated,
+        };
+      });
+    },
+
+    duplicateSavedMeal: (id, name) =>
+      store.update((state) => {
+        const source = state.savedMeals.find((meal) => meal.id === id);
+        if (!source) {
+          throw notFoundError();
+        }
+        const timestamp = now().toISOString();
+        const copy: SavedMeal = {
+          id: newId(),
+          name: normalizeLibraryName(name),
+          items: withPortionIds(source.items, state.foods, newId),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        return { state: { ...state, savedMeals: [...state.savedMeals, copy] }, result: copy };
+      }),
+
+    deleteSavedMeal: (id) =>
+      store.update((state) => ({
+        state: { ...state, savedMeals: state.savedMeals.filter((meal) => meal.id !== id) },
+        result: undefined,
+      })),
+  };
+
+  return { foods, savedMeals };
 }

@@ -4,6 +4,9 @@ import type {
   FoodInput,
   FoodListQuery,
   FoodReferenceCounts,
+  LibraryListQuery,
+  SavedMeal,
+  SavedMealInput,
 } from '@/features/library/types';
 
 export type LibraryRepositoryErrorCode =
@@ -46,4 +49,13 @@ export type FoodRepository = {
   setFavorite(id: string, favorite: boolean): Promise<Food>;
   countReferences(id: string): Promise<FoodReferenceCounts>;
   deleteFood(id: string): Promise<void>;
+};
+
+export type SavedMealRepository = {
+  listSavedMeals(query: LibraryListQuery): Promise<SavedMeal[]>;
+  getSavedMeal(id: string): Promise<SavedMeal | null>;
+  createSavedMeal(input: SavedMealInput): Promise<SavedMeal>;
+  updateSavedMeal(id: string, input: SavedMealInput): Promise<SavedMeal>;
+  duplicateSavedMeal(id: string, name: string): Promise<SavedMeal>;
+  deleteSavedMeal(id: string): Promise<void>;
 };
