@@ -12,6 +12,7 @@ import {
   type MealRow,
 } from '@/features/meals/repositories/mealRowMapping';
 import type { Meal, MealInput } from '@/features/meals/types';
+import { doesUpdateDetachSource } from '@/features/meals/utils/mealEntrySources';
 import { applyMealUpdate, createMeal } from '@/features/meals/utils/mealRecords';
 import type { SqlDatabase } from '@/storage/database/types';
 import type { LocalDateKey } from '@/utils/date';
@@ -115,6 +116,9 @@ export function createSqliteMealRepository(
             throw new MealRepositoryError('not_found', MEAL_REPOSITORY_MESSAGES.notFound);
           }
           const next = applyMealUpdate(current, input, now());
+          if (doesUpdateDetachSource(current, input)) {
+            await transaction.runAsync('DELETE FROM meal_entry_sources WHERE meal_id = ?', [id]);
+          }
           await transaction.runAsync(
             `UPDATE meals SET name = ?, calories = ?, protein = ?, carbs = ?, fat = ?, meal_type = ?, local_date = ?, local_time = ?, updated_at = ? WHERE id = ?`,
             [

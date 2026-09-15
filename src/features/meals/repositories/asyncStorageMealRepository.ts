@@ -15,6 +15,11 @@ import {
   normalizeStoredMeals,
   readStoredMealId,
 } from '@/features/meals/utils/mealRecords';
+import {
+  doesUpdateDetachSource,
+  MEAL_ENTRY_SOURCE_RECORD_KEY,
+  parseStoredMealEntrySource,
+} from '@/features/meals/utils/mealEntrySources';
 import type { LocalDateKey } from '@/utils/date';
 import { createId } from '@/utils/id';
 import { createSerialQueue, type SerialQueue } from '@/utils/serialQueue';
@@ -121,7 +126,15 @@ export function createAsyncStorageMealRepository({
         const updated: Meal = applyMealUpdate(current, input, now());
         const original = records[index];
         const nextRecords = [...records];
-        nextRecords[index] = isRecord(original) ? { ...original, ...updated } : updated;
+        if (isRecord(original)) {
+          const { [MEAL_ENTRY_SOURCE_RECORD_KEY]: entrySource, ...rest } = original;
+          const keepSource = parseStoredMealEntrySource(entrySource) === null || !doesUpdateDetachSource(current, input);
+          nextRecords[index] = keepSource && entrySource !== undefined
+            ? { ...rest, [MEAL_ENTRY_SOURCE_RECORD_KEY]: entrySource, ...updated }
+            : { ...rest, ...updated };
+        } else {
+          nextRecords[index] = updated;
+        }
         await writeRecords(nextRecords);
         return updated;
       }),

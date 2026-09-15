@@ -1,4 +1,4 @@
-import type { MealEntrySource } from '@/features/meals/types';
+import type { Meal, MealEntrySource, MealInput } from '@/features/meals/types';
 import { isRecord } from '@/features/meals/utils/mealRecords';
 import { isServingUnit } from '@/features/library/utils/servingFormat';
 import { MACRO_KEYS, type MacroTotals } from '@/types/nutrition';
@@ -61,4 +61,8 @@ export function parseStoredMealEntrySource(value: unknown): MealEntrySource | nu
     amount,
     loggedAt,
   };
+}
+
+export function doesUpdateDetachSource(current: Meal, input: MealInput): boolean {
+  return current.name !== input.name || MACRO_KEYS.some((key) => current[key] !== input[key]);
 }
