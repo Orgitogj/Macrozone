@@ -1,6 +1,8 @@
-import type { Food, SavedMeal } from '@/features/library/types';
+import type { Food, Recipe, SavedMeal } from '@/features/library/types';
 import {
   calculateLoggedPortionNutrition,
+  calculateLoggedRecipeNutrition,
+  calculateRecipeNutrition,
   exceedsDiaryEntryLimits,
   NutritionCalculationError,
 } from '@/features/library/utils/nutritionMath';
@@ -91,6 +93,39 @@ export function buildSavedMealEntries(savedMeal: SavedMeal, destination: LogDest
           amount: item.amount,
         },
       })),
+    destination,
+    todayKey,
+  );
+}
+
+export function buildRecipeEntry(
+  recipe: Recipe,
+  servingsLogged: number,
+  destination: LogDestination,
+  todayKey: LocalDateKey,
+): EntryBuildResult {
+  return guard(
+    () => [
+      {
+        input: {
+          name: recipe.name,
+          ...calculateLoggedRecipeNutrition(recipe, servingsLogged),
+          mealType: destination.mealType,
+          date: destination.date,
+          time: null,
+        },
+        source: {
+          sourceType: 'recipe',
+          foodId: null,
+          recipeId: recipe.id,
+          savedMealId: null,
+          sourceName: recipe.name,
+          serving: { amount: 1, unit: 'serving' },
+          baseNutrition: calculateRecipeNutrition(recipe).perServing,
+          amount: servingsLogged,
+        },
+      },
+    ],
     destination,
     todayKey,
   );
