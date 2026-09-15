@@ -1,3 +1,4 @@
+import { LIBRARY_LIMITS } from '@/features/library/constants';
 import { getLibraryRepositories } from '@/features/library/repositories/getLibraryRepositories';
 import {
   LibraryRepositoryError,
@@ -5,7 +6,16 @@ import {
 } from '@/features/library/repositories/libraryRepositories';
 import type { Food, FoodListQuery } from '@/features/library/types';
 import { validateFoodForm, type FoodFormErrors, type FoodFormValues } from '@/features/library/validation/foodForm';
+import { compareCodePoints, toNameKey } from '@/features/library/utils/librarySearch';
+import type { DiaryLogRepository } from '@/features/meals/repositories/diaryLogRepository';
+import { getDiaryLogRepository } from '@/features/meals/repositories/getDiaryLogRepository';
 import { confirmDestructiveAction, type ConfirmDestructiveActionOptions } from '@/utils/confirm';
+
+export type RecentFood = {
+  food: Food;
+  lastLoggedAt: string;
+  suggestedAmount: number;
+};
 
 export type FormSubmitResult<TValue, TErrors> =
   | { status: 'saved'; value: TValue }
@@ -39,9 +49,11 @@ export function buildDeleteFoodMessage(food: Food, references: { savedMeals: num
 
 export function createLibraryService({
   foods,
+  diary,
   confirm = confirmDestructiveAction,
 }: {
   foods: FoodRepository;
+  diary: DiaryLogRepository;
   confirm?: ConfirmAction;
 }) {
   const runDelete = async (options: ConfirmDestructiveActionOptions, remove: () => Promise<void>, failure: string): Promise<DeleteResult> => {
@@ -59,6 +71,31 @@ export function createLibraryService({
   return {
     listFoods: (query: FoodListQuery) => foods.listFoods(query),
     getFood: (id: string) => foods.getFood(id),
+
+    listRecentFoods: async (limit: number = LIBRARY_LIMITS.recentLimit): Promise<RecentFood[]> => {
+      const usage = await diary.listRecentFoodUsage(limit);
+      const byId = new Map((await foods.getFoodsByIds(usage.map((entry) => entry.foodId))).map((food) => [food.id, food]));
+      return usage
+        .flatMap((entry): RecentFood[] => {
+          const food = byId.get(entry.foodId);
+          if (!food) {
+            return [];
+          }
+          return [
+            {
+              food,
+              lastLoggedAt: entry.lastLoggedAt,
+              suggestedAmount: entry.lastServingUnit === food.serving.unit ? entry.lastAmount : food.serving.amount,
+            },
+          ];
+        })
+        .sort(
+          (a, b) =>
+            (a.lastLoggedAt === b.lastLoggedAt ? 0 : a.lastLoggedAt > b.lastLoggedAt ? -1 : 1) ||
+            compareCodePoints(toNameKey(a.food.name), toNameKey(b.food.name)) ||
+            compareCodePoints(a.food.id, b.food.id),
+        );
+    },
 
     saveFood: async (values: FoodFormValues, existingId: string | null): Promise<FormSubmitResult<Food, FoodFormErrors>> => {
       const validation = validateFoodForm(values);
@@ -98,7 +135,7 @@ let defaultService: LibraryService | null = null;
 export function getLibraryService(): LibraryService {
   if (defaultService === null) {
     const repositories = getLibraryRepositories();
-    defaultService = createLibraryService(repositories);
+    defaultService = createLibraryService({ ...repositories, diary: getDiaryLogRepository() });
   }
   return defaultService;
 }
