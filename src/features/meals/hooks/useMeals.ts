@@ -11,6 +11,7 @@ import {
   loadAllMeals,
   type DestructiveActionResult,
 } from '@/features/meals/services/mealActions';
+import { getDiaryLogService } from '@/features/meals/services/diaryLogActions';
 import type { Meal } from '@/features/meals/types';
 import {
   createLoadingResource,
@@ -23,7 +24,7 @@ import {
 import type { LocalDateKey } from '@/utils/date';
 import { createSingleFlight } from '@/utils/singleFlight';
 
-export type MealsPendingAction = 'delete-meal' | 'clear-day' | 'delete-all' | null;
+export type MealsPendingAction = 'delete-meal' | 'clear-day' | 'delete-all' | 'copy-day' | null;
 
 const EMPTY_MEALS: Meal[] = [];
 
@@ -105,6 +106,28 @@ export function useMeals() {
       'Could not delete your meal history. Please try again.',
     );
 
+  const requestCopyDay = (sourceDate: LocalDateKey, destinationDate: LocalDateKey, todayKey: LocalDateKey) =>
+    actionFlight.run(async () => {
+      setPendingAction('copy-day');
+      try {
+        const result = await getDiaryLogService().copyDay({
+          sourceDate,
+          destinationDate,
+          todayKey,
+          mealCount: meals.filter((meal) => meal.date === sourceDate).length,
+        });
+        if (result.status === 'copied') {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else if (result.status !== 'cancelled') {
+          Alert.alert('Could not copy meals', result.message);
+        }
+        return result.status;
+      } finally {
+        setPendingAction(null);
+        await reload();
+      }
+    });
+
   return {
     resource,
     meals,
@@ -113,5 +136,6 @@ export function useMeals() {
     requestDeleteMeal,
     requestClearDay,
     requestDeleteAllHistory,
+    requestCopyDay,
   };
 }

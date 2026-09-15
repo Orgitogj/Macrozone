@@ -108,14 +108,31 @@ export function HomeScreen() {
                 detail={summary.meals.length === 1 ? '1 meal logged' : `${summary.meals.length} meals logged`}
                 trailing={
                   summary.meals.length > 0 ? (
-                    <TextButton
-                      label='Clear Day'
-                      tone='danger'
-                      size='small'
-                      disabled={isBusy}
-                      onPress={() => void mealsState.requestClearDay(selectedDateKey, todayKey)}
-                      accessibilityHint='Deletes every meal logged on this day after confirmation'
-                    />
+                    <View style={styles.sectionActions}>
+                      {isToday ? null : (
+                        <TextButton
+                          label='Copy to Today'
+                          size='small'
+                          disabled={isBusy}
+                          onPress={() =>
+                            void mealsState.requestCopyDay(selectedDateKey, todayKey, todayKey).then((status) => {
+                              if (status === 'copied') {
+                                selectedDate.goToToday();
+                              }
+                            })
+                          }
+                          accessibilityHint='Copies every meal from this day to today after confirmation'
+                        />
+                      )}
+                      <TextButton
+                        label='Clear Day'
+                        tone='danger'
+                        size='small'
+                        disabled={isBusy}
+                        onPress={() => void mealsState.requestClearDay(selectedDateKey, todayKey)}
+                        accessibilityHint='Deletes every meal logged on this day after confirmation'
+                      />
+                    </View>
                   ) : null
                 }
               />
@@ -153,5 +170,11 @@ const styles = StyleSheet.create({
   },
   meals: {
     gap: spacing.xl,
+  },
+  sectionActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    columnGap: spacing.lg,
   },
 });
