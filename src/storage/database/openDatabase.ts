@@ -1,6 +1,6 @@
 import { openDatabaseAsync } from 'expo-sqlite';
 
-import { enableForeignKeys } from '@/storage/database/connection';
+import { createSerializedSqlDatabase, enableForeignKeys } from '@/storage/database/connection';
 import { prepareDatabase } from '@/storage/database/prepareDatabase';
 import type { SqlDatabase } from '@/storage/database/types';
 
@@ -14,7 +14,7 @@ export function getDatabase(): Promise<SqlDatabase> {
       const connection = await openDatabaseAsync(DATABASE_NAME);
       try {
         await enableForeignKeys(connection);
-        return await prepareDatabase(connection);
+        return await prepareDatabase(createSerializedSqlDatabase(connection));
       } catch (error) {
         await connection.closeAsync().catch(() => undefined);
         throw error;

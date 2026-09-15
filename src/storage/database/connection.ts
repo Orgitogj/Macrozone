@@ -1,4 +1,5 @@
-import type { SqlExecutor } from '@/storage/database/types';
+import type { SqlDatabase, SqlExecutor } from '@/storage/database/types';
+import { createSerialQueue } from '@/utils/serialQueue';
 
 export class DatabaseInitializationError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -6,6 +7,10 @@ export class DatabaseInitializationError extends Error {
     this.name = 'DatabaseInitializationError';
   }
 }
+
+export type SqlConnection = SqlExecutor & {
+  closeAsync(): Promise<void>;
+};
 
 export type ForeignKeyViolation = {
   table: string;
@@ -36,4 +41,34 @@ export async function enableForeignKeys(executor: SqlExecutor): Promise<void> {
 
 export async function findForeignKeyViolations(executor: SqlExecutor): Promise<ForeignKeyViolation[]> {
   return executor.getAllAsync<ForeignKeyViolation>('PRAGMA foreign_key_check', []);
+}
+
+export function createSerializedSqlDatabase(connection: SqlConnection): SqlDatabase & { closeAsync(): Promise<void> } {
+  const queue = createSerialQueue();
+
+  return {
+    execAsync: (source) => queue.run(() => connection.execAsync(source)),
+    runAsync: (source, params) => queue.run(() => connection.runAsync(source, params)),
+    getFirstAsync: <T>(source: string, params: Parameters<SqlExecutor['getFirstAsync']>[1]) =>
+      queue.run(() => connection.getFirstAsync<T>(source, params)),
+    getAllAsync: <T>(source: string, params: Parameters<SqlExecutor['getAllAsync']>[1]) =>
+      queue.run(() => connection.getAllAsync<T>(source, params)),
+    closeAsync: () => queue.run(() => connection.closeAsync()),
+    withExclusiveTransactionAsync: (task) =>
+      queue.run(async () => {
+        await connection.execAsync('BEGIN IMMEDIATE');
+        try {
+          await task(connection);
+        } catch (error) {
+          await connection.execAsync('ROLLBACK').catch(() => undefined);
+          throw error;
+        }
+        try {
+          await connection.execAsync('COMMIT');
+        } catch (error) {
+          await connection.execAsync('ROLLBACK').catch(() => undefined);
+          throw error;
+        }
+      }),
+  };
 }
