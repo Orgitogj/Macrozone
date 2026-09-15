@@ -47,6 +47,21 @@ export type SavedMeal = {
   updatedAt: string;
 };
 
+export type RecipeInput = {
+  name: string;
+  servings: number;
+  ingredients: FoodPortionInput[];
+};
+
+export type Recipe = {
+  id: string;
+  name: string;
+  servings: number;
+  ingredients: FoodPortion[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type FoodListQuery = {
   search?: string;
   favoritesOnly?: boolean;
