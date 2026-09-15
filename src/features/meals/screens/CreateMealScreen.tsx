@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { ScrollScreen } from '@/components/layout/ScrollScreen';
 import { AppLoader } from '@/components/ui/AppLoader';
@@ -20,9 +20,16 @@ type CreateMealScreenProps = {
   duplicateOfId?: string;
   presetDate?: LocalDateKey | null;
   presetMealType?: MealType | null;
+  headerAccessory?: ReactNode;
 };
 
-export function CreateMealScreen({ title, duplicateOfId, presetDate = null, presetMealType = null }: CreateMealScreenProps) {
+export function CreateMealScreen({
+  title,
+  duplicateOfId,
+  presetDate = null,
+  presetMealType = null,
+  headerAccessory = null,
+}: CreateMealScreenProps) {
   const navigation = useMealNavigation();
   const preset = { date: presetDate, mealType: presetMealType };
   const form = useMealForm(createEmptyMealFormValues(new Date(), preset));
@@ -60,13 +67,18 @@ export function CreateMealScreen({ title, duplicateOfId, presetDate = null, pres
       return;
     }
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    if (!isDuplicate && !hasPreset) {
-      reset(createEmptyMealFormValues(new Date()));
+    if (!isDuplicate) {
+      reset(createEmptyMealFormValues(new Date(), hasPreset ? preset : {}));
     }
     navigation.showDay(result.meal.date);
   };
 
-  const header = title ? <ScreenHeader title={title} subtitle='Log what you ate' /> : null;
+  const header = (
+    <>
+      {title ? <ScreenHeader title={title} subtitle='Log what you ate' /> : null}
+      {headerAccessory}
+    </>
+  );
 
   if (isDuplicate && sourceState.status !== 'ready') {
     return (

@@ -1,3 +1,4 @@
+export { AddFoodScreen } from '@/features/meals/screens/AddFoodScreen';
 export { CreateMealScreen } from '@/features/meals/screens/CreateMealScreen';
 export { EditMealScreen } from '@/features/meals/screens/EditMealScreen';
 export { HomeScreen } from '@/features/meals/screens/HomeScreen';
