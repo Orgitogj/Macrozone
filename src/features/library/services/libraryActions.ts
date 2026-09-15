@@ -112,6 +112,8 @@ export function createLibraryService({
       }
     },
 
+    setFavorite: (id: string, favorite: boolean) => foods.setFavorite(id, favorite),
+
     deleteFood: async (food: Food): Promise<DeleteResult> => {
       let references = { savedMeals: 0, recipes: 0 };
       try {
