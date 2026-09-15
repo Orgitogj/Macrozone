@@ -1,10 +1,11 @@
-import type { Food } from '@/features/library/types';
+import type { Food, SavedMeal } from '@/features/library/types';
 import type { DiaryLogRepository } from '@/features/meals/repositories/diaryLogRepository';
 import { getDiaryLogRepository } from '@/features/meals/repositories/getDiaryLogRepository';
 import { getMealErrorMessage } from '@/features/meals/services/mealActions';
 import type { Meal, MealEntrySource } from '@/features/meals/types';
 import {
   buildFoodEntry,
+  buildSavedMealEntries,
   type EntryBuildResult,
   type LogDestination,
 } from '@/features/meals/utils/libraryEntries';
@@ -30,6 +31,9 @@ export function createDiaryLogService({
   return {
     logFood: (food: Food, amount: number, destination: LogDestination, todayKey: LocalDateKey) =>
       log(buildFoodEntry(food, amount, destination, todayKey), false, 'Could not add this food. Please try again.'),
+
+    logSavedMeal: (savedMeal: SavedMeal, destination: LogDestination, todayKey: LocalDateKey) =>
+      log(buildSavedMealEntries(savedMeal, destination, todayKey), true, 'Could not add this saved meal. Nothing was added.'),
 
     getEntrySource: (mealId: string): Promise<MealEntrySource | null> => repository.getEntrySource(mealId),
   };

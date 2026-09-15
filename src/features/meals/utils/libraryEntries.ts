@@ -1,4 +1,4 @@
-import type { Food } from '@/features/library/types';
+import type { Food, SavedMeal } from '@/features/library/types';
 import {
   calculateLoggedPortionNutrition,
   exceedsDiaryEntryLimits,
@@ -64,6 +64,33 @@ export function buildFoodEntry(food: Food, amount: number, destination: LogDesti
         },
       },
     ],
+    destination,
+    todayKey,
+  );
+}
+
+export function buildSavedMealEntries(savedMeal: SavedMeal, destination: LogDestination, todayKey: LocalDateKey): EntryBuildResult {
+  return guard(
+    () =>
+      savedMeal.items.map((item) => ({
+        input: {
+          name: item.foodName,
+          ...calculateLoggedPortionNutrition(item),
+          mealType: destination.mealType,
+          date: destination.date,
+          time: null,
+        },
+        source: {
+          sourceType: 'food' as const,
+          foodId: item.foodId,
+          recipeId: null,
+          savedMealId: savedMeal.id,
+          sourceName: item.foodName,
+          serving: { ...item.serving },
+          baseNutrition: { ...item.nutrition },
+          amount: item.amount,
+        },
+      })),
     destination,
     todayKey,
   );
