@@ -18,23 +18,30 @@ The app is currently an early MVP. All data stays on the device.
 - **Nutrition Goals, reminders, and appearance:** open from the options button in the Home header to review targets and saved details, recalculate them, edit them manually, open meal reminders, or choose the theme.
 - **Home (daily dashboard):** move to the previous or next day, or jump back to today. Future dates are not selectable.
   - A calorie card shows calories eaten against the estimated target, with a progress bar and one status: "left", "Target reached", or "over". Protein, carbs, and fat follow as compact progress cards. Every card has a text equivalent for screen readers, and status is never shown by color alone.
-  - Meals are grouped into Breakfast, Lunch, Dinner, and Snacks, each with its calorie subtotal and an "Add" button that opens the meal form preset to that meal type and the selected date. Empty sections show a short hint instead of a large empty state.
-  - "Clear Day" deletes the selected day's meals after confirmation.
+  - Meals are grouped into Breakfast, Lunch, Dinner, and Snacks, each with its calorie subtotal and an "Add" button that opens the Add screen preset to that meal type and the selected date. Empty sections show a short hint instead of a large empty state.
+  - "Clear Day" deletes the selected day's meals after confirmation. On a past day, "Copy to Today" copies that day's meals to today after a confirmation that shows the source, destination, and number of meals.
   - Users who already have meals but have not set goals see a dismissible "Personalize your goals" suggestion.
   - Copy and Share are secondary actions at the bottom of the day.
   - If refreshing fails after data has loaded, the data stays visible with a warning and a "Try again" button.
 - **Themes:** System (default), Light, or Dark, chosen on the Nutrition Goals screen and remembered on the device. System follows the device setting and falls back to dark when the device does not report one. The status bar, navigation bars, tab bar, iOS picker sheet, web inputs, and the root background follow the active theme.
-- **Add Meal:** log a meal with a name, meal type (breakfast, lunch, dinner, snack), date (today or earlier), an optional time, calories, and optional protein, carbs, and fat.
+- **Add (logging hub):** the Add tab, Home's contextual Add buttons, and reminder taps open one screen that shows where food will be added (date and meal type) and lets you choose from Recent, Favorites, Foods, Saved Meals, Recipes, or Manual entry.
+  - **Recent** lists the foods you logged most recently from your library, newest first, each once, with the last amount you used.
+  - **Favorites** and **Foods** list your food library with local, case-insensitive search. Tap the star on a food to favorite or unfavorite it.
+  - Tap a food to choose an amount in its serving unit (with ½×, 1×, and 2× serving shortcuts), review the calculated nutrition, adjust the date and meal type, and add it.
+  - **Saved Meals** are reusable groups of foods with amounts. Adding one creates one diary entry per food, all at once or not at all.
+  - **Recipes** are built from foods with a total number of servings. They show whole-recipe and per-serving nutrition, and you log them by the serving.
+  - Foods, saved meals, and recipes can be created, edited, duplicated (saved meals and recipes), and deleted after confirmation. Editing or deleting them never changes meals you already logged.
+- **Manual entry:** log a meal with a name, meal type (breakfast, lunch, dinner, snack), date (today or earlier), an optional time, calories, and optional protein, carbs, and fat.
   - The date is chosen with a native date picker (future dates are blocked) or with the previous/next-day and Today controls. The optional time uses a native time picker and can be cleared.
   - On Android the pickers open as system dialogs. On iOS they open in a bottom sheet with Cancel and Done. On web they use the browser's date and time inputs. Saving is disabled while a picker is open.
   - Fields are validated inline. Decimals accept `.` or `,`, negative values are rejected, and limits are 10,000 kcal and 1,000 g per macro.
   - While saving, the button shows progress and ignores repeated taps. If saving fails, the form keeps what you entered.
   - After saving, Home opens on the meal's date without adding duplicate navigation history.
-- **Meal details:** tap a meal to edit any field (including moving it to another meal type or date), duplicate it into a new meal dated today, or delete it.
+- **Meal details:** tap a meal to edit any field (including moving it to another meal type or date), duplicate it into a new meal dated today, or delete it. Meals added from the library show what they were added from; changing their name or nutrition turns them into manual entries.
 - **Deleting:** every meal row has a visible delete button. Long-pressing a row and the screen-reader "Delete" action are shortcuts. Every deletion asks for confirmation.
 - **Diary (history):** every logged meal, grouped by local date (newest first) with daily calorie totals and meal counts, in a virtualized list. Each day has its own "Clear Day" action. "Delete all history" is a low-emphasis action at the end of the list and asks for a separate confirmation.
 - **Copy / Share summary:** copy or share a plain-text summary of the selected day, including consumed, goal, and remaining or exceeded values for each macro.
-- **Local persistence:** on Android and iOS, meals are stored in an on-device SQLite database. On first launch after updating, meals saved by earlier versions are copied from AsyncStorage automatically. On web, meals stay in AsyncStorage (browser storage). Everything works offline.
+- **Local persistence:** on Android and iOS, meals and the food library are stored in an on-device SQLite database. On first launch after updating, meals saved by earlier versions are copied from AsyncStorage automatically. On web, meals and the food library stay in AsyncStorage (browser storage). Everything works offline.
 - **Meal reminders (Android and iOS):** open Meal reminders from the Nutrition Goals screen to set a daily local reminder for breakfast, lunch, dinner, and snacks.
   - Each reminder has its own switch, time picker, and status (off, on, on without notification permission, or not scheduled yet), with a retry when something fails. All reminders start off, and nothing is scheduled until you turn one on.
   - MacroZone asks for notification permission only when you turn on a reminder. If notifications are blocked, the reminder stays off and the screen explains how to allow notifications in system settings.
@@ -99,20 +106,24 @@ src/
     _layout.tsx               Root stack inside the theme provider (tabs plus detail screens)
     (tabs)/                   Home (index.tsx), Add (add.tsx), Diary (diary.tsx)
     meal/[id].tsx             Edit meal
-    meal/new.tsx              New meal preset from Home (?date=&mealType=) or a duplicate (?duplicateOf=<id>)
+    meal/new.tsx              Add hub preset from Home or a reminder (?date=&mealType=), or a duplicate (?duplicateOf=<id>)
+    food/, saved-meal/,       new.tsx (create), [id]/index.tsx (details and logging), [id]/edit.tsx (edit);
+    recipe/                   routes carry the diary destination (?date=&mealType=)
     onboarding.tsx            First-run goal setup (shown only while the onboarding gate requires it)
     goals/                    Nutrition Goals overview, calculator (calculate.tsx), manual editor (edit.tsx)
   features/
     meals/
       components/             Presentational meal UI (form, calorie and macro cards, meal-type sections,
                               meal rows, history list, copy/share actions)
-      hooks/                  useMeals, useMeal, useMealForm, useMealNavigation
-      screens/                Home, MealHistory (Diary), CreateMeal, EditMeal
-      services/mealActions.ts Use cases: load, save, submit form, confirm-and-delete meal/day/all
-      repositories/           MealRepository interface, SQLite and AsyncStorage implementations,
-                              row mapping, legacy AsyncStorage import, getMealRepository(.web).ts
+      hooks/                  useMeals, useMeal, useMealForm, useMealNavigation, useAddHubRows, useMealEntrySource
+      screens/                Home, MealHistory (Diary), AddFood (logging hub), CreateMeal (manual), EditMeal
+      services/               mealActions (load, save, confirm-and-delete), diaryLogActions (log food, saved meal,
+                              recipe; copy day)
+      repositories/           MealRepository and DiaryLogRepository interfaces with SQLite and AsyncStorage
+                              implementations, row mapping, legacy AsyncStorage import, get*Repository(.web).ts
       utils/                  Pure logic: totals, date filtering/grouping, meal-type sections, new-meal route
-                              params, summaries, record normalization
+                              params, summaries, record normalization, diary entries built from library items,
+                              entry snapshots
       validation/mealForm.ts  Form values, validation rules and messages
       types.ts, constants.ts
       index.ts                Public API of the feature
@@ -126,6 +137,17 @@ src/
       validation/             Manual target validation and warnings
     profile/                  Body profile types, unit conversion, profile form validation
     onboarding/               Onboarding gate (provider and pure decision) and onboarding screen
+    library/
+      components/             Library rows, food form fields, amount field, portion list editor, food picker,
+                              nutrition preview, favorite button
+      hooks/                  useLibraryResource, useLibraryNavigation, useLibraryRouteParams, usePortionDrafts
+      repositories/           FoodRepository, SavedMealRepository, RecipeRepository interfaces; SQLite and
+                              AsyncStorage implementations; getLibraryRepositories(.web).ts
+      screens/                Food, saved meal, and recipe details and forms
+      services/               Library use cases (search, recents, save, favorite, duplicate, delete)
+      utils/                  Pure logic: nutrition math and rounding, search normalization and escaping,
+                              record parsing, serving formatting, route parameters, row text
+      validation/             Food, amount, portion, saved meal, and recipe validation
     reminders/
       components/             Reminder card, permission notice, entry card
       hooks/                  useReminderSettings (screen state), useReminderLifecycle (tap handling, reconciliation),
@@ -144,9 +166,11 @@ src/
     ui/                       Shared UI: AppText, AppCard, AppButton, TextButton, IconButton, AppTextInput,
                               FormField, SegmentedControl, ChoiceList, DateNavigator, DateTimePickerField
                               (.tsx native, .web.tsx web), ProgressBar, ScreenHeader, SectionHeader,
-                              KeyValueRow, NoticeCard, StepHeader, AppSwitch, loading/empty/error states
-  hooks/                      Cross-feature hooks: useSelectedDate, useTodayDateKey
-  storage/database/           SQLite access: SqlDatabase interface, open/prepare, ordered schema migrations
+                              KeyValueRow, NoticeCard, StepHeader, AppSwitch, SearchField, ChipGroup,
+                              loading/empty/error states
+  hooks/                      Cross-feature hooks: useSelectedDate, useTodayDateKey, useDebouncedValue
+  storage/database/           SQLite access: SqlDatabase interface, connection setup (foreign keys, serialized
+                              transactions), open/prepare, ordered schema migrations, shared write queue
   types/nutrition.ts          Shared nutrition types (MacroTotals)
   utils/                      Pure shared utilities: dates, times, date/time input conversion, number input, formatting, ids,
                               single-flight guard, serial queue, checksum, route params, async loading state,
@@ -180,26 +204,38 @@ Import paths use the `@/` alias, which maps to `src/` (see `tsconfig.json`). For
 
 ### Persistence architecture
 
-Screens, hooks, and components never touch a database. They use use cases in `features/meals/services`, which depend only on the `MealRepository` interface:
+Screens, hooks, and components never touch a database. They use services that depend only on repository interfaces:
 
 ```text
-Screens → hooks/services → MealRepository → SQLite (Android, iOS) | AsyncStorage (web)
+Screens → hooks/services → MealRepository, DiaryLogRepository,
+                           FoodRepository, SavedMealRepository, RecipeRepository
+                         → SQLite (Android, iOS) | AsyncStorage (web)
 ```
 
-`getMealRepository()` is split into `getMealRepository.ts` (SQLite) and `getMealRepository.web.ts` (AsyncStorage), so web bundles never include SQLite. `expo-sqlite` web support is still in alpha and needs special hosting headers.
+Each repository getter is split into a native file (SQLite) and a `.web.ts` file (AsyncStorage), so web bundles never include SQLite. `expo-sqlite` web support is still in alpha and needs special hosting headers.
 
-### SQLite schema (`macrozone.db`, schema version 2)
+### Connection setup and foreign keys
+
+- `getDatabase()` opens the database and immediately runs `PRAGMA foreign_keys = ON`, then reads the setting back and fails with a clear initialization error if it is not `1`. This happens before `prepareDatabase()`, migrations, the legacy import, or any transaction. SQLite's default is not relied on.
+- `prepareDatabase()` verifies the setting again before changing anything, sets WAL mode, migrates, and then runs `PRAGMA foreign_key_check`. Any reported violation is logged in development only; no data is repaired or deleted.
+- Transactions run on that same foreign-key-enabled connection (`BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`), and a queue keeps other statements from interleaving with them. `expo-sqlite`'s own `withExclusiveTransactionAsync` is not used, because it opens a separate connection on which the pragma has not been set.
+- Repositories also clear or delete references explicitly inside their transactions. This mirrors the web implementation and is defense in depth; SQLite enforcement remains the final protection.
+
+### SQLite schema (`macrozone.db`, schema version 3)
 
 | Table | Purpose | Key columns and constraints |
 | ----- | ------- | --------------------------- |
 | `meals` | Logged meals | `id TEXT PRIMARY KEY`, `name`, `calories`/`protein`/`carbs`/`fat REAL` (must be numeric), `meal_type` (breakfast, lunch, dinner, snack), `local_date` (`YYYY-MM-DD`), `local_time` (`HH:MM` or null), `created_at`, `updated_at`, `extra_json` (valid JSON or null) |
 | `app_metadata` | App-level markers such as the legacy-import record | `key TEXT PRIMARY KEY`, `value` (valid JSON), `updated_at` |
 | `legacy_meal_records` | Raw legacy records that could not be imported as meals, kept for recovery | `source_index`, `raw_json`, `reason` (`unreadable`, `duplicate_id`, `conflict`, `unparseable_source`), `imported_at` |
-
 | `user_profile` (v2) | The one saved body profile used for goal calculation | `id` (always 1), `unit_system`, `sex` (female, male, unspecified), `age_years`, `height_cm`, `weight_kg`, `activity_level`, `weight_goal`, `weekly_rate_kg`, `updated_at` |
 | `nutrition_goals` (v2) | The current daily targets | `id` (always 1), `calories`/`protein`/`carbs`/`fat` (non-negative), `source` (calculated or manual), `updated_at` |
+| `foods` (v3) | Reusable food definitions | `id`, `name`, `name_key` (normalized lowercase), `serving_amount` (> 0), `serving_unit` (g, ml, serving, piece, cup, tbsp, tsp), nutrition per serving (non-negative, limited), `is_favorite` with `favorited_at`, timestamps; unique on the full definition |
+| `saved_meals` / `saved_meal_items` (v3) | Reusable groups of foods | items: `saved_meal_id → saved_meals ON DELETE CASCADE`, `position` (unique per saved meal), `food_id → foods ON DELETE SET NULL`, food snapshot (name, serving, nutrition), `amount` (> 0) |
+| `recipes` / `recipe_ingredients` (v3) | Recipes built from foods | `servings` (> 0); ingredients: `recipe_id → recipes ON DELETE CASCADE`, `position`, `food_id → foods ON DELETE SET NULL`, food snapshot, `amount` |
+| `meal_entry_sources` (v3) | Immutable snapshot of what a logged meal was added from (one per meal at most) | `meal_id → meals ON DELETE CASCADE` (primary key), `source_type` (food or recipe), `food_id` / `recipe_id` / `saved_meal_id` (each `ON DELETE SET NULL`), `log_group_id`, source name, serving, base nutrition, amount, `logged_at` |
 
-Indexes: `(local_date, local_time, created_at)`, `(local_date, meal_type)`, and `(created_at)`.
+Indexes: meals `(local_date, local_time, created_at)`, `(local_date, meal_type)`, `(created_at)`; foods `(name_key, id)`, `(is_favorite, name_key, id)`, and the unique definition index; saved meals and recipes `(name_key, id)`; item and ingredient `food_id`; entry sources `(food_id, logged_at)`, `(logged_at)`, `(log_group_id)`.
 
 Onboarding status (`completed` or `skipped`) is stored in `app_metadata` under the key `onboarding`. Saving goals writes the profile (when calculated), goals, and status in one exclusive transaction. On web, the whole plan is one JSON value under the AsyncStorage key `nutrition_plan`.
 
@@ -209,7 +245,8 @@ Onboarding status (`completed` or `skipped`) is stored in `app_metadata` under t
 - Each migration runs in an exclusive transaction together with its version bump. A failed migration rolls back completely and leaves the previous version in place.
 - A database created by a newer app version is refused rather than modified.
 - Version 2 adds `user_profile` and `nutrition_goals` without changing existing tables.
-- Future data (favorites, measurements) will be added as new numbered migrations in the phases that introduce those features. Meal reminders are device settings and are stored in AsyncStorage, not SQLite.
+- Version 3 adds the food library, saved meals, recipes, and meal entry snapshots. It only creates new tables and indexes; existing meals, goals, and recovery records are not changed.
+- Future data (measurements) will be added as new numbered migrations in the phases that introduce those features. Meal reminders are device settings and are stored in AsyncStorage, not SQLite.
 
 ### Migration from AsyncStorage
 
@@ -230,10 +267,40 @@ Running the import again is safe: the marker is checked before and inside the tr
 
 - **No lost updates.** Writes change individual rows instead of rewriting the whole list.
 - **One write at a time.** All repository writes, on both SQLite and AsyncStorage, go through a serial queue.
-- **Exclusive transactions.** Multi-statement work (updates, delete-all, migrations, import) runs in exclusive transactions.
+- **Exclusive transactions.** Multi-statement work (updates, deletes with snapshots, migrations, import, saved meals and recipes with their items, logging a saved meal or recipe, copying a day) runs in one transaction and rolls back completely on failure.
 - **One setup per launch.** Database setup is cached, so concurrent screens trigger a single migration and import. A failed setup is retried on the next call.
 - **Delete All** removes all rows from `meals` only. Migration-recovery records in `legacy_meal_records` and the legacy AsyncStorage backup are kept; no ordinary meal deletion (single meal, Clear Day, or Delete All) removes them.
 - **Reverting to an older build.** An app version from before this change would read the untouched AsyncStorage snapshot, which does not include meals added afterwards.
+
+## Food library and logging
+
+### Food definitions and diary snapshots
+
+- A **food** is a reusable definition: a name, a base serving (amount and unit), and nutrition for that serving. Favorites are a flag on the food, so favoriting is an idempotent update.
+- A **logged meal** stays a normal `meals` row with its own totals, so Home, Diary, and existing meals work exactly as before. When it is added from the library, a `meal_entry_sources` row records an immutable snapshot: source name, serving, base nutrition, amount, and optional links to the food, recipe, or saved meal. On web, the same snapshot is stored inside the meal record under `macrozoneEntrySource`.
+- Editing or deleting a food, saved meal, or recipe never changes logged meals. Deleting a library item clears its link on snapshots (SQLite `ON DELETE SET NULL`) and never deletes diary history.
+- Saved meal items and recipe ingredients also store a snapshot of the food, so they keep working if the food is later edited or deleted; the item is then shown as "not in food library".
+- Editing a library-added meal in the manual form keeps its snapshot when only the date, time, or meal type changes. Changing its name or nutrition removes the snapshot, turning it into a manual entry.
+
+### Servings and calculations
+
+- Amounts are entered in the food's own serving unit. The multiplier is amount ÷ serving amount. Units are not converted into each other (for example, grams into cups), because that would need density information.
+- Consumed nutrition = base nutrition × multiplier, calculated at full precision. Values are rounded to 2 decimal places (with decimal-safe rounding, so 1.005 becomes 1.01) at the boundary: each diary entry or saved meal item when it is stored or shown, and each total when it is shown. Saved meal totals are the sum of the rounded items, re-rounded to remove floating-point drift.
+- Recipe totals are summed from unrounded ingredients. Per-serving nutrition is total ÷ servings, and a logged recipe is total × servings logged ÷ servings; both are rounded to 2 decimals.
+- Calculations reject non-finite or negative values and zero servings instead of clamping them. A single diary entry cannot exceed the manual form's limits (10,000 kcal and 1,000 g per macro), so every logged meal stays editable.
+- Limits: names up to 80 characters; serving size up to 10,000; amounts up to 100,000 with 2 decimals; calories per serving up to 10,000 and each macro up to 1,000 g; recipe servings up to 1,000; up to 100 servings logged at once; up to 50 foods per saved meal and 100 ingredients per recipe.
+
+### Recent foods, search, and copying
+
+- Recent foods are derived from snapshots of meals that still exist: one row per food, newest first, ties broken by name and ID, up to 30. Manual and legacy meals, and meals whose food was deleted, are not suggested, because they have no reusable serving information.
+- Search trims and lowercases the input and matches it anywhere in the normalized name. SQLite uses a parameterized `LIKE ? ESCAPE '\'` with `%`, `_`, and `\` escaped; web applies the same normalization in memory. Results are ordered by normalized name, then ID, and limited to 200 with a hint to refine the search.
+- Adding a saved meal creates one diary entry per food with a shared group ID, in one transaction. "Copy to Today" copies every meal of a past day in one transaction with new IDs, keeping snapshots and regrouping saved meal entries; originals are unchanged.
+- Repeated taps are ignored while an action is running, and database constraints remain the final protection against invalid data.
+
+### Web storage
+
+- The library is one versioned JSON value under `food_library` (`version: 1`). Each change is written in a single `setItem`, which keeps multi-item changes atomic within a tab.
+- Malformed entries are skipped when reading, and the original value is copied to `food_library_unreadable_backup` before the first overwrite. A payload from a newer version is refused for reading and writing.
 
 ## Meal reminders
 
@@ -316,7 +383,10 @@ Business logic is implemented as pure functions and unit-tested with Jest (`npm 
 
 - Only the current goals and body profile are stored; there is no goal or weight history yet (planned with progress tracking).
 - Changing your weight does not recalculate goals automatically; use Recalculate on the Nutrition Goals screen.
-- There are no serving sizes yet (planned together with recipes).
+- Serving amounts use each food's own unit; there is no conversion between units such as grams and cups.
+- There is no online food database or barcode scanning; foods are entered by hand.
+- Copying is available for whole past days to today; copying a single meal section or to another date is not in the UI yet.
+- On web, the food library and meals are separate AsyncStorage values. Deleting a library item on web keeps its old ID inside logged meal snapshots (there are no foreign keys), which is harmless because logged meals never read it for nutrition.
 - The legacy AsyncStorage copy of pre-SQLite meals is kept on the device indefinitely. Removing it will be a separate, explicitly confirmed step.
 - Raw legacy records that could not be imported are preserved, but there is no screen to review or recover them yet.
 - On web, meals are stored in AsyncStorage (browser storage), not SQLite. Web writes are serialized within one tab, but separate browser tabs are not coordinated.
@@ -340,7 +410,7 @@ Work proceeds one phase at a time:
 4. **Personalized goals and onboarding:** BMR/TDEE-based estimates and editable goals.
 5. **Home and diary UX:** design system, light/dark/system themes, safe areas, keyboard handling, a Home dashboard grouped by meal type, and the Diary.
 6. **Reminders and settings:** configurable local meal reminders with permission handling, reconciliation, and notification-tap navigation.
-7. **Fast logging:** favorites, recent foods, saved meals, recipes, servings.
+7. **Fast logging:** food library with servings, recent foods, favorites, saved meals, recipes, a logging hub, and copying a day.
 8. **Progress tracking:** weight, body measurements, trends, charts.
 9. **Accounts and optional cloud sync:** Supabase, with offline use preserved.
 10. **Advanced features:** evaluated and delivered as separate projects (food database, barcode scanning, health platform integrations, and so on).
