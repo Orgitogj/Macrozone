@@ -5,6 +5,7 @@ export type ConfirmDestructiveActionOptions = {
   message: string;
   confirmLabel: string;
   cancelLabel?: string;
+  destructive?: boolean;
 };
 
 export function confirmDestructiveAction({
@@ -12,6 +13,7 @@ export function confirmDestructiveAction({
   message,
   confirmLabel,
   cancelLabel = 'Cancel',
+  destructive = true,
 }: ConfirmDestructiveActionOptions): Promise<boolean> {
   if (Platform.OS === 'web') {
     const webConfirm = (globalThis as { confirm?: (text: string) => boolean }).confirm;
@@ -24,7 +26,7 @@ export function confirmDestructiveAction({
       message,
       [
         { text: cancelLabel, style: 'cancel', onPress: () => resolve(false) },
-        { text: confirmLabel, style: 'destructive', onPress: () => resolve(true) },
+        { text: confirmLabel, style: destructive ? 'destructive' : 'default', onPress: () => resolve(true) },
       ],
       { cancelable: true, onDismiss: () => resolve(false) },
     );
