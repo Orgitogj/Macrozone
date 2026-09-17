@@ -172,6 +172,25 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       'CREATE INDEX idx_meal_entry_sources_group ON meal_entry_sources (log_group_id)',
     ],
   },
+  {
+    version: 4,
+    name: 'create_meal_entry_ai_sources',
+    statements: [
+      `CREATE TABLE meal_entry_ai_sources (
+        meal_id TEXT PRIMARY KEY NOT NULL REFERENCES meals (id) ON DELETE CASCADE,
+        input_kind TEXT NOT NULL CHECK (input_kind IN ('text', 'photo')),
+        meal_title TEXT NOT NULL CHECK (length(meal_title) BETWEEN 1 AND 80),
+        item_name TEXT NOT NULL CHECK (length(item_name) BETWEEN 1 AND 80),
+        amount REAL NOT NULL CHECK (typeof(amount) IN ('integer', 'real') AND amount > 0),
+        unit TEXT NOT NULL CHECK (unit IN ('g', 'ml', 'serving', 'piece', 'cup', 'tbsp', 'tsp')),
+        matched_food_id TEXT REFERENCES foods (id) ON DELETE SET NULL,
+        log_group_id TEXT NOT NULL CHECK (length(log_group_id) > 0),
+        logged_at TEXT NOT NULL
+      )`,
+      'CREATE INDEX idx_meal_entry_ai_sources_group ON meal_entry_ai_sources (log_group_id)',
+      'CREATE INDEX idx_meal_entry_ai_sources_food ON meal_entry_ai_sources (matched_food_id)',
+    ],
+  },
 ];
 
 export function assertMigrationsOrdered(migrations: readonly SchemaMigration[]): void {

@@ -37,10 +37,12 @@ export type DailyMealSummary = {
   goalProgress: MacroGoalBreakdown;
 };
 
-export type MealEntrySourceType = 'food' | 'recipe';
+export type LibraryEntrySourceType = 'food' | 'recipe';
 
-export type MealEntrySource = {
-  sourceType: MealEntrySourceType;
+export type AiEntryInputKind = 'text' | 'photo';
+
+export type LibraryMealEntrySource = {
+  sourceType: LibraryEntrySourceType;
   foodId: string | null;
   recipeId: string | null;
   savedMealId: string | null;
@@ -52,9 +54,27 @@ export type MealEntrySource = {
   loggedAt: string;
 };
 
+export type AiMealEntrySource = {
+  sourceType: 'ai';
+  inputKind: AiEntryInputKind;
+  mealTitle: string;
+  itemName: string;
+  amount: number;
+  unit: Serving['unit'];
+  matchedFoodId: string | null;
+  logGroupId: string | null;
+  loggedAt: string;
+};
+
+export type MealEntrySource = LibraryMealEntrySource | AiMealEntrySource;
+
+export type NewLibraryEntrySource = Omit<LibraryMealEntrySource, 'loggedAt' | 'logGroupId'>;
+
+export type NewAiEntrySource = Omit<AiMealEntrySource, 'loggedAt' | 'logGroupId'>;
+
 export type NewDiaryEntry = {
   input: MealInput;
-  source: Omit<MealEntrySource, 'loggedAt' | 'logGroupId'>;
+  source: NewLibraryEntrySource | NewAiEntrySource;
 };
 
 export type RecentFoodUsage = {

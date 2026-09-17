@@ -8,7 +8,7 @@ import {
   toMealRepositoryError,
 } from '@/features/meals/repositories/mealRepository';
 import type { Meal, MealEntrySource, RecentFoodUsage } from '@/features/meals/types';
-import { MEAL_ENTRY_SOURCE_RECORD_KEY, parseStoredMealEntrySource } from '@/features/meals/utils/mealEntrySources';
+import { isLibraryEntrySource, MEAL_ENTRY_SOURCE_RECORD_KEY, parseStoredMealEntrySource } from '@/features/meals/utils/mealEntrySources';
 import { createMeal, isRecord, normalizeStoredMeal, readStoredMealId } from '@/features/meals/utils/mealRecords';
 import { createId } from '@/utils/id';
 import { createSerialQueue, type SerialQueue } from '@/utils/serialQueue';
@@ -90,7 +90,7 @@ export function createAsyncStorageDiaryLogRepository({
       let groupId: string | null;
       try {
         ids = entries.map(() => newId());
-        groupId = group ? newId() : null;
+        groupId = group || entries.some((entry) => entry.source.sourceType === 'ai') ? newId() : null;
       } catch (error) {
         return Promise.reject(error);
       }
@@ -118,7 +118,7 @@ export function createAsyncStorageDiaryLogRepository({
       for (const record of await readRecords()) {
         const meal = normalizeStoredMeal(record);
         const source = isRecord(record) ? parseStoredMealEntrySource(record[MEAL_ENTRY_SOURCE_RECORD_KEY]) : null;
-        if (!meal || !source || source.foodId === null) {
+        if (!meal || !source || !isLibraryEntrySource(source) || source.foodId === null) {
           continue;
         }
         const current = latest.get(source.foodId);

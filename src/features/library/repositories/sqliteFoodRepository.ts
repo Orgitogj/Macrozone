@@ -250,6 +250,7 @@ export function createSqliteFoodRepository(
           await transaction.runAsync('UPDATE saved_meal_items SET food_id = NULL WHERE food_id = ?', [id]);
           await transaction.runAsync('UPDATE recipe_ingredients SET food_id = NULL WHERE food_id = ?', [id]);
           await transaction.runAsync('UPDATE meal_entry_sources SET food_id = NULL WHERE food_id = ?', [id]);
+          await transaction.runAsync('UPDATE meal_entry_ai_sources SET matched_food_id = NULL WHERE matched_food_id = ?', [id]);
           await transaction.runAsync('DELETE FROM foods WHERE id = ?', [id]);
         });
       }),

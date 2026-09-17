@@ -5,7 +5,14 @@ import {
   toMealRepositoryError,
 } from '@/features/meals/repositories/mealRepository';
 import { INSERT_MEAL_SQL, mealToRowValues, rowToMeal, type MealRow } from '@/features/meals/repositories/mealRowMapping';
-import type { Meal, MealEntrySource, NewDiaryEntry, RecentFoodUsage } from '@/features/meals/types';
+import type {
+  AiMealEntrySource,
+  LibraryMealEntrySource,
+  Meal,
+  MealEntrySource,
+  NewDiaryEntry,
+  RecentFoodUsage,
+} from '@/features/meals/types';
 import { createMeal } from '@/features/meals/utils/mealRecords';
 import { parseStoredMealEntrySource } from '@/features/meals/utils/mealEntrySources';
 import { isServingUnit } from '@/features/library/utils/servingFormat';
@@ -31,8 +38,22 @@ type SourceRow = {
   logged_at: string;
 };
 
+type AiSourceRow = {
+  meal_id: string;
+  input_kind: string;
+  meal_title: string;
+  item_name: string;
+  amount: number;
+  unit: string;
+  matched_food_id: string | null;
+  log_group_id: string;
+  logged_at: string;
+};
+
 const SOURCE_COLUMNS =
   'meal_id, source_type, food_id, recipe_id, saved_meal_id, log_group_id, source_name, serving_amount, serving_unit, base_calories, base_protein, base_carbs, base_fat, amount, logged_at';
+
+const AI_SOURCE_COLUMNS = 'meal_id, input_kind, meal_title, item_name, amount, unit, matched_food_id, log_group_id, logged_at';
 
 const INSERT_SOURCE_SQL = `INSERT INTO meal_entry_sources (${SOURCE_COLUMNS}) VALUES (
   ?, ?,
@@ -40,6 +61,12 @@ const INSERT_SOURCE_SQL = `INSERT INTO meal_entry_sources (${SOURCE_COLUMNS}) VA
   (SELECT id FROM recipes WHERE id = ?),
   (SELECT id FROM saved_meals WHERE id = ?),
   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)`;
+
+const INSERT_AI_SOURCE_SQL = `INSERT INTO meal_entry_ai_sources (${AI_SOURCE_COLUMNS}) VALUES (
+  ?, ?, ?, ?, ?, ?,
+  (SELECT id FROM foods WHERE id = ?),
+  ?, ?
 )`;
 
 export function rowToMealEntrySource(row: SourceRow): MealEntrySource | null {
@@ -62,7 +89,21 @@ export function rowToMealEntrySource(row: SourceRow): MealEntrySource | null {
   });
 }
 
-function sourceValues(mealId: string, source: MealEntrySource): SqlValue[] {
+export function rowToAiEntrySource(row: AiSourceRow): MealEntrySource | null {
+  return parseStoredMealEntrySource({
+    sourceType: 'ai',
+    inputKind: row.input_kind,
+    mealTitle: row.meal_title,
+    itemName: row.item_name,
+    amount: row.amount,
+    unit: row.unit,
+    matchedFoodId: row.matched_food_id,
+    logGroupId: row.log_group_id,
+    loggedAt: row.logged_at,
+  });
+}
+
+function librarySourceValues(mealId: string, source: LibraryMealEntrySource): SqlValue[] {
   return [
     mealId,
     source.sourceType,
@@ -80,6 +121,43 @@ function sourceValues(mealId: string, source: MealEntrySource): SqlValue[] {
     source.amount,
     source.loggedAt,
   ];
+}
+
+function aiSourceValues(mealId: string, source: AiMealEntrySource, groupId: string): SqlValue[] {
+  return [
+    mealId,
+    source.inputKind,
+    source.mealTitle,
+    source.itemName,
+    source.amount,
+    source.unit,
+    source.matchedFoodId,
+    source.logGroupId ?? groupId,
+    source.loggedAt,
+  ];
+}
+
+export async function insertMealWithSource(transaction: SqlExecutor, meal: Meal, source: MealEntrySource | null): Promise<void> {
+  await transaction.runAsync(INSERT_MEAL_SQL, mealToRowValues(meal, null));
+  if (source === null) {
+    return;
+  }
+  switch (source.sourceType) {
+    case 'ai':
+      await transaction.runAsync(INSERT_AI_SOURCE_SQL, aiSourceValues(meal.id, source, meal.id));
+      break;
+    default:
+      await transaction.runAsync(INSERT_SOURCE_SQL, librarySourceValues(meal.id, source));
+  }
+}
+
+export async function selectMealEntrySource(executor: SqlExecutor, mealId: string): Promise<MealEntrySource | null> {
+  const row = await executor.getFirstAsync<SourceRow>(`SELECT ${SOURCE_COLUMNS} FROM meal_entry_sources WHERE meal_id = ?`, [mealId]);
+  if (row) {
+    return rowToMealEntrySource(row);
+  }
+  const aiRow = await executor.getFirstAsync<AiSourceRow>(`SELECT ${AI_SOURCE_COLUMNS} FROM meal_entry_ai_sources WHERE meal_id = ?`, [mealId]);
+  return aiRow ? rowToAiEntrySource(aiRow) : null;
 }
 
 type Options = {
@@ -119,16 +197,9 @@ export function createSqliteDiaryLogRepository(
       }
     });
 
-  const insertEntry = async (
-    transaction: SqlExecutor,
-    meal: Meal,
-    source: MealEntrySource | null,
-  ): Promise<void> => {
-    await transaction.runAsync(INSERT_MEAL_SQL, mealToRowValues(meal, null));
-    if (source) {
-      await transaction.runAsync(INSERT_SOURCE_SQL, sourceValues(meal.id, source));
-    }
-  };
+  const insertEntry = insertMealWithSource;
+
+  const selectSource = selectMealEntrySource;
 
   return {
     logEntries: (entries: readonly NewDiaryEntry[], { group }) => {
@@ -139,7 +210,7 @@ export function createSqliteDiaryLogRepository(
       let groupId: string | null;
       try {
         ids = entries.map(() => newId());
-        groupId = group ? newId() : null;
+        groupId = group || entries.some((entry) => entry.source.sourceType === 'ai') ? newId() : null;
       } catch (error) {
         return Promise.reject(error);
       }
@@ -150,11 +221,7 @@ export function createSqliteDiaryLogRepository(
           for (const [index, entry] of entries.entries()) {
             const createdAt = new Date(base + (entries.length - 1 - index));
             const meal = createMeal(entry.input, { id: ids[index], now: createdAt });
-            await insertEntry(transaction, meal, {
-              ...entry.source,
-              logGroupId: groupId,
-              loggedAt: meal.createdAt,
-            });
+            await insertEntry(transaction, meal, { ...entry.source, logGroupId: groupId, loggedAt: meal.createdAt });
             meals.push(meal);
           }
         });
@@ -162,14 +229,7 @@ export function createSqliteDiaryLogRepository(
       });
     },
 
-    getEntrySource: (mealId: string) =>
-      read(async (database) => {
-        const row = await database.getFirstAsync<SourceRow>(
-          `SELECT ${SOURCE_COLUMNS} FROM meal_entry_sources WHERE meal_id = ?`,
-          [mealId],
-        );
-        return row ? rowToMealEntrySource(row) : null;
-      }),
+    getEntrySource: (mealId: string) => read((database) => selectSource(database, mealId)),
 
     listRecentFoodUsage: (limit: number) =>
       read(async (database) => {
@@ -219,18 +279,23 @@ export function createSqliteDiaryLogRepository(
       write(async (database) => {
         const created: Meal[] = [];
         await database.withExclusiveTransactionAsync(async (transaction) => {
-          const rows = await transaction.getAllAsync<MealRow & { source_meal_id: string | null } & Partial<SourceRow>>(
-            `SELECT m.id, m.name, m.calories, m.protein, m.carbs, m.fat, m.meal_type, m.local_date, m.local_time, m.created_at, m.updated_at, m.extra_json,
-               s.meal_id AS source_meal_id, s.source_type, s.food_id, s.recipe_id, s.saved_meal_id, s.log_group_id, s.source_name,
-               s.serving_amount, s.serving_unit, s.base_calories, s.base_protein, s.base_carbs, s.base_fat, s.amount, s.logged_at
-             FROM meals m
-             LEFT JOIN meal_entry_sources s ON s.meal_id = m.id
-             WHERE m.local_date = ? AND (? IS NULL OR m.meal_type = ?)
-             ORDER BY m.created_at DESC, m.id DESC`,
+          const rows = await transaction.getAllAsync<MealRow>(
+            `SELECT id, name, calories, protein, carbs, fat, meal_type, local_date, local_time, created_at, updated_at, extra_json
+             FROM meals
+             WHERE local_date = ? AND (? IS NULL OR meal_type = ?)
+             ORDER BY created_at DESC, id DESC`,
             [sourceDate, mealType, mealType],
           );
           const base = now().getTime();
           const groupIds = new Map<string, string>();
+          const remapGroup = (groupId: string | null): string | null => {
+            if (groupId === null) {
+              return null;
+            }
+            const mapped = groupIds.get(groupId) ?? newId();
+            groupIds.set(groupId, mapped);
+            return mapped;
+          };
           for (const [index, row] of rows.entries()) {
             const original = rowToMeal(row);
             if (!original) {
@@ -238,19 +303,10 @@ export function createSqliteDiaryLogRepository(
             }
             const createdAt = new Date(base + (rows.length - 1 - index));
             const meal = createMeal({ ...original, date: destinationDate }, { id: newId(), now: createdAt });
-            const source =
-              row.source_meal_id !== null && row.source_type !== undefined
-                ? rowToMealEntrySource(row as SourceRow)
-                : null;
-            let copiedSource: MealEntrySource | null = null;
-            if (source) {
-              let groupId: string | null = null;
-              if (source.logGroupId) {
-                groupId = groupIds.get(source.logGroupId) ?? newId();
-                groupIds.set(source.logGroupId, groupId);
-              }
-              copiedSource = { ...source, logGroupId: groupId, loggedAt: meal.createdAt };
-            }
+            const source = await selectSource(transaction, original.id);
+            const copiedSource: MealEntrySource | null = source
+              ? { ...source, logGroupId: remapGroup(source.logGroupId), loggedAt: meal.createdAt }
+              : null;
             await insertEntry(transaction, meal, copiedSource);
             created.push(meal);
           }
