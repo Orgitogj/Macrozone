@@ -9,10 +9,13 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "typecheck:server": "tsc -p server/tsconfig.json",
+    "server:install": "npm --prefix server ci",
+    "server:start": "npm --prefix server start",
     "doctor": "npx expo-doctor",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
-    "check": "npm run lint && npm run typecheck && npm test"
+    "check": "npm run lint && npm run typecheck && npm run typecheck:server && npm test"
   },
   "jest": {
     "preset": "jest-expo",
@@ -37,8 +40,11 @@
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.14",
     "expo-crypto": "~15.0.9",
+    "expo-file-system": "~19.0.24",
     "expo-font": "~14.0.11",
     "expo-haptics": "~15.0.8",
+    "expo-image-manipulator": "~14.0.8",
+    "expo-image-picker": "~17.0.11",
     "expo-linking": "~8.0.12",
     "expo-notifications": "~0.32.17",
     "expo-router": "~6.0.23",
