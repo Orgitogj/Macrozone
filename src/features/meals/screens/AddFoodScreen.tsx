@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/layout/Screen';
 import { AppLoader } from '@/components/ui/AppLoader';
@@ -12,6 +12,7 @@ import { NoticeCard } from '@/components/ui/NoticeCard';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { SearchField } from '@/components/ui/SearchField';
 import { TextButton } from '@/components/ui/TextButton';
+import { AiEntryPanel } from '@/features/ai-meal/components/AiEntryPanel';
 import { FavoriteButton } from '@/features/library/components/FavoriteButton';
 import { LibraryRow } from '@/features/library/components/LibraryRow';
 import { LIBRARY_LIMITS } from '@/features/library/constants';
@@ -32,6 +33,7 @@ type AddFoodScreenProps = {
   title?: string;
   presetDate?: LocalDateKey | null;
   presetMealType?: MealType | null;
+  initialMode?: AddMode;
 };
 
 const MODE_LABELS: Readonly<Record<AddMode, string>> = {
@@ -40,6 +42,7 @@ const MODE_LABELS: Readonly<Record<AddMode, string>> = {
   foods: 'Foods',
   savedMeals: 'Saved Meals',
   recipes: 'Recipes',
+  ai: 'AI',
   manual: 'Manual',
 };
 
@@ -77,18 +80,18 @@ function Separator() {
   return <View style={styles.separator} />;
 }
 
-export function AddFoodScreen({ title, presetDate = null, presetMealType = null }: AddFoodScreenProps) {
+export function AddFoodScreen({ title, presetDate = null, presetMealType = null, initialMode = 'recent' }: AddFoodScreenProps) {
   const todayKey = useTodayDateKey();
   const navigation = useLibraryNavigation();
   const [destination, setDestination] = useState<LogDestination>(() => ({
     date: presetDate ?? todayKey,
     mealType: presetMealType ?? inferMealTypeFromDate(new Date()),
   }));
-  const [mode, setMode] = useState<AddMode>('recent');
+  const [mode, setMode] = useState<AddMode>(initialMode);
   const [search, setSearch] = useState('');
   const [favoriteMessage, setFavoriteMessage] = useState<string | null>(null);
   const [favoriteFlight] = useState(createSingleFlight);
-  const libraryMode: LibraryMode = mode === 'manual' ? 'recent' : mode;
+  const libraryMode: LibraryMode = mode === 'manual' || mode === 'ai' ? 'recent' : mode;
   const hub = useAddHubRows(libraryMode, search);
 
   const modeChips = (
@@ -113,6 +116,24 @@ export function AddFoodScreen({ title, presetDate = null, presetMealType = null 
         presetMealType={destination.mealType}
         headerAccessory={<View style={styles.manualChips}>{modeChips}</View>}
       />
+    );
+  }
+
+  if (mode === 'ai') {
+    return (
+      <Screen edges={title ? ['top'] : ['bottom']}>
+        <ScrollView
+          contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps='handled'
+        >
+          <View style={styles.header}>
+            {title ? <ScreenHeader title={title} subtitle='Log food to your diary' /> : null}
+            <LogDestinationFields destination={destination} todayKey={todayKey} onChange={setDestination} />
+            {modeChips}
+            <AiEntryPanel destination={destination} onLogManually={() => setMode('manual')} />
+          </View>
+        </ScrollView>
+      </Screen>
     );
   }
 

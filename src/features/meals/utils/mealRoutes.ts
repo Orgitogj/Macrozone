@@ -39,3 +39,17 @@ export function parseNewMealRouteParams(
     mealType: isMealType(mealType) ? mealType : null,
   };
 }
+
+export function buildManualMealRouteParams({
+  date,
+  mealType,
+}: {
+  date: LocalDateKey;
+  mealType: MealType;
+}): { date: string; mealType: string; mode: 'manual' } {
+  return { date, mealType, mode: 'manual' };
+}
+
+export function isManualModeParam(value: RawParam): boolean {
+  return getSingleParam(value) === 'manual';
+}

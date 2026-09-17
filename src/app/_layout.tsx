@@ -52,6 +52,7 @@ function RootNavigator() {
         <Stack.Screen name='recipe/new' options={{ ...detailScreenOptions, title: 'New Recipe' }} />
         <Stack.Screen name='recipe/[id]/index' options={{ ...detailScreenOptions, title: 'Recipe' }} />
         <Stack.Screen name='recipe/[id]/edit' options={{ ...detailScreenOptions, title: 'Edit Recipe' }} />
+        <Stack.Screen name='ai-meal' options={{ ...detailScreenOptions, title: 'AI Estimate' }} />
       </Stack.Protected>
     </Stack>
   );

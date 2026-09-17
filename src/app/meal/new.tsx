@@ -1,11 +1,11 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 
 import { AddFoodScreen, CreateMealScreen } from '@/features/meals';
-import { parseNewMealRouteParams } from '@/features/meals/utils/mealRoutes';
+import { isManualModeParam, parseNewMealRouteParams } from '@/features/meals/utils/mealRoutes';
 import { useTodayDateKey } from '@/hooks/useTodayDateKey';
 
 export default function NewMealRoute() {
-  const params = useLocalSearchParams<{ duplicateOf?: string; date?: string; mealType?: string }>();
+  const params = useLocalSearchParams<{ duplicateOf?: string; date?: string; mealType?: string; mode?: string }>();
   const todayKey = useTodayDateKey();
   const route = parseNewMealRouteParams(params, todayKey);
 
@@ -21,7 +21,11 @@ export default function NewMealRoute() {
   return (
     <>
       <Stack.Screen options={{ title: 'Add Food' }} />
-      <AddFoodScreen presetDate={route.date} presetMealType={route.mealType} />
+      <AddFoodScreen
+        presetDate={route.date}
+        presetMealType={route.mealType}
+        initialMode={isManualModeParam(params.mode) ? 'manual' : 'recent'}
+      />
     </>
   );
 }

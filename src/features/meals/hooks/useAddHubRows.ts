@@ -11,11 +11,11 @@ import {
 } from '@/features/library/utils/libraryRowText';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
-export const ADD_MODES = ['recent', 'favorites', 'foods', 'savedMeals', 'recipes', 'manual'] as const;
+export const ADD_MODES = ['recent', 'favorites', 'foods', 'savedMeals', 'recipes', 'ai', 'manual'] as const;
 
 export type AddMode = (typeof ADD_MODES)[number];
 
-export type LibraryMode = Exclude<AddMode, 'manual'>;
+export type LibraryMode = Exclude<AddMode, 'manual' | 'ai'>;
 
 export type AddHubRow =
   | { key: string; kind: 'food'; food: Food; suggestedAmount: number | null; text: RowText }
