@@ -6,7 +6,7 @@ MacroZone is a mobile meal and macronutrient tracker built with Expo and React N
 Select a date → log food → view daily macros → track progress
 ```
 
-The app is currently an early MVP. All data stays on the device.
+The app is currently an early MVP. All data stays on the device, except a meal description or photo that you explicitly send for an AI estimate (see [AI meal estimates](#ai-meal-estimates)).
 
 ## Current features
 
@@ -24,13 +24,18 @@ The app is currently an early MVP. All data stays on the device.
   - Copy and Share are secondary actions at the bottom of the day.
   - If refreshing fails after data has loaded, the data stays visible with a warning and a "Try again" button.
 - **Themes:** System (default), Light, or Dark, chosen on the Nutrition Goals screen and remembered on the device. System follows the device setting and falls back to dark when the device does not report one. The status bar, navigation bars, tab bar, iOS picker sheet, web inputs, and the root background follow the active theme.
-- **Add (logging hub):** the Add tab, Home's contextual Add buttons, and reminder taps open one screen that shows where food will be added (date and meal type) and lets you choose from Recent, Favorites, Foods, Saved Meals, Recipes, or Manual entry.
+- **Add (logging hub):** the Add tab, Home's contextual Add buttons, and reminder taps open one screen that shows where food will be added (date and meal type) and lets you choose from Recent, Favorites, Foods, Saved Meals, Recipes, AI, or Manual entry.
   - **Recent** lists the foods you logged most recently from your library, newest first, each once, with the last amount you used.
   - **Favorites** and **Foods** list your food library with local, case-insensitive search. Tap the star on a food to favorite or unfavorite it.
   - Tap a food to choose an amount in its serving unit (with ½×, 1×, and 2× serving shortcuts), review the calculated nutrition, adjust the date and meal type, and add it.
   - **Saved Meals** are reusable groups of foods with amounts. Adding one creates one diary entry per food, all at once or not at all.
   - **Recipes** are built from foods with a total number of servings. They show whole-recipe and per-serving nutrition, and you log them by the serving.
   - Foods, saved meals, and recipes can be created, edited, duplicated (saved meals and recipes), and deleted after confirmation. Editing or deleting them never changes meals you already logged.
+  - **AI** opens an estimate from a meal description or a photo. It is available only when the app is built with an AI endpoint; otherwise it says so and offers manual logging.
+- **AI meal estimates:** describe a meal or take or choose a photo, tap Analyze, and review the estimate before anything is saved.
+  - The review lists each food with its amount, unit, calories, and macros. You can edit the title and every item, remove items, add items, link an item to one of your foods or unlink it, and change the date and meal type. Totals are recalculated by the app as you edit.
+  - The screen always states that AI estimates can be inaccurate and are not medical advice, and shows the overall confidence and any warnings. Photo estimates carry an extra caution.
+  - "Add to Diary" saves one diary entry per reviewed item, all at once or not at all. Analysis can be cancelled, retried, or abandoned for manual logging at any point.
 - **Manual entry:** log a meal with a name, meal type (breakfast, lunch, dinner, snack), date (today or earlier), an optional time, calories, and optional protein, carbs, and fat.
   - The date is chosen with a native date picker (future dates are blocked) or with the previous/next-day and Today controls. The optional time uses a native time picker and can be cleared.
   - On Android the pickers open as system dialogs. On iOS they open in a bottom sheet with Cancel and Done. On web they use the browser's date and time inputs. Saving is disabled while a picker is open.
@@ -56,7 +61,8 @@ The app is currently an early MVP. All data stays on the device.
 | Navigation    | Expo Router 6 (file-based routing, typed routes)                  |
 | Language      | TypeScript 5.9 (`strict`)                                         |
 | Persistence   | `expo-sqlite` (Android, iOS); `@react-native-async-storage/async-storage` (web meals, legacy data, small preferences) |
-| Device APIs   | `expo-notifications`, `expo-haptics`, `expo-clipboard`, `expo-crypto` |
+| Device APIs   | `expo-notifications`, `expo-haptics`, `expo-clipboard`, `expo-crypto`, `expo-image-picker`, `expo-image-manipulator`, `expo-file-system` |
+| AI service    | Standalone Node.js service in `server/` (no framework) using the official `@anthropic-ai/sdk` |
 | Pickers       | `@react-native-community/datetimepicker` (Android and iOS; web uses HTML inputs) |
 | Tooling       | ESLint 9 (`eslint-config-expo`), Expo Doctor, React Compiler (experimental) |
 | Testing       | Jest 29 with `jest-expo`                                          |
@@ -67,7 +73,7 @@ The New Architecture is enabled (`newArchEnabled: true`).
 
 Prerequisites:
 
-- Node.js 22.5 or later (local database tests use Node's built-in `node:sqlite`) and npm
+- Node.js 22.18 or later (local database tests use Node's built-in `node:sqlite`, and the AI service runs TypeScript directly with Node's type stripping) and npm
 - The [Expo Go](https://expo.dev/go) app on a device, or an Android emulator / iOS simulator
 
 ```bash
@@ -91,9 +97,12 @@ In the Expo CLI, press `a` for Android, `i` for iOS, or `w` for web, or scan the
 | `npm run web`       | Start and open in a browser                              |
 | `npm run lint`      | Run ESLint through `expo lint`                           |
 | `npm run typecheck` | Run the TypeScript compiler without emitting files       |
+| `npm run typecheck:server` | Type-check the AI service in `server/` (run `npm run server:install` first) |
+| `npm run server:install` | Install the AI service dependencies from its lockfile |
+| `npm run server:start` | Start the AI service (requires the environment variables below) |
 | `npm test`          | Run unit tests once                                      |
 | `npm run test:watch`| Run unit tests in watch mode                             |
-| `npm run check`     | Run lint, typecheck, and tests                           |
+| `npm run check`     | Run lint, app and server typechecks, and tests           |
 | `npm run doctor`    | Run Expo Doctor (checks config and dependency versions)  |
 
 When adding or updating Expo-related packages, use `npx expo install <package>` so that versions stay compatible with the installed SDK.
@@ -106,7 +115,9 @@ src/
     _layout.tsx               Root stack inside the theme provider (tabs plus detail screens)
     (tabs)/                   Home (index.tsx), Add (add.tsx), Diary (diary.tsx)
     meal/[id].tsx             Edit meal
-    meal/new.tsx              Add hub preset from Home or a reminder (?date=&mealType=), or a duplicate (?duplicateOf=<id>)
+    meal/new.tsx              Add hub preset from Home or a reminder (?date=&mealType=), manual entry (&mode=manual),
+                              or a duplicate (?duplicateOf=<id>)
+    ai-meal.tsx               AI estimate and review (?date=&mealType=&input=text|photo)
     food/, saved-meal/,       new.tsx (create), [id]/index.tsx (details and logging), [id]/edit.tsx (edit);
     recipe/                   routes carry the diary destination (?date=&mealType=)
     onboarding.tsx            First-run goal setup (shown only while the onboarding gate requires it)
@@ -159,6 +170,20 @@ src/
       utils/                  Pure logic: settings model and parsing, notification payloads, permission mapping,
                               reconciliation planning, tap-to-route mapping, status text
     settings/                 Appearance (theme) settings
+    ai-meal/
+      adapters/               AI endpoint client (the only network call in the app) and photo picker/processing adapter
+                              that tracks and deletes only the processed files it creates
+      components/             Text composer, photo picker, analysis progress, error notice, estimate notice,
+                              review item card, Add hub entry panel
+      config/                 Endpoint URL resolution (HTTPS only, local HTTP in development)
+      hooks/                  useAiMealFlow (single-flight analysis and saving, cancellation, stale protection),
+                              useAiMealNavigation
+      repositories/           AI preferences (rate-limit key, photo disclosure acknowledgement) in AsyncStorage
+      screens/                AiMeal (compose, analyze, review, save)
+      services/               AI meal use cases (analyze, build review with local matching, save)
+      utils/                  Pure logic: flow reducer, review draft math, local food matching, error messages, routes,
+                              owned temporary files, photo session cleanup
+      validation/             Text, photo, and response validation
   theme/                      Design system: semantic light/dark palettes, spacing, radii, typography,
                               sizes, theme preference (resolution, storage), AppThemeProvider and hooks
   components/
@@ -177,6 +202,15 @@ src/
                               device time zone, confirmation dialog
 jest.environment.js           Jest environment: pins/switches timezones, provides in-memory SQLite for tests
 assets/images/                App icon, adaptive icons, splash image, favicon
+server/                       AI meal analysis service (never bundled into the app)
+  src/main.ts                 Startup: configuration, provider, rate limiter, HTTP server, shutdown
+  src/config.ts               Environment validation (fails fast, logs variable names only)
+  src/contract.ts             Versioned request/response contract, error codes, limits
+  src/app/handleRequest.ts    Routing, CORS, rate-limit key, limits, concurrency, budget, validation, deadlines, errors
+  src/http/                   node:http adapter (body limit, disconnect cancellation) and trusted-proxy client IP
+  src/providers/              Provider interface, model allowlist, retry policy, Anthropic adapter, prompt and schema
+  src/validation/             Request validation (text, image type and size) and model output normalization
+  src/security/, src/logging/ In-memory usage store (rate limits, daily budget), concurrency limit; JSON logger
 ```
 
 Import paths use the `@/` alias, which maps to `src/` (see `tsconfig.json`). For example, `import { HomeScreen } from '@/features/meals'`. Use `./` only for files in the same folder. Route files and other features import a feature through its `index.ts`.
@@ -221,7 +255,7 @@ Each repository getter is split into a native file (SQLite) and a `.web.ts` file
 - Transactions run on that same foreign-key-enabled connection (`BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`), and a queue keeps other statements from interleaving with them. `expo-sqlite`'s own `withExclusiveTransactionAsync` is not used, because it opens a separate connection on which the pragma has not been set.
 - Repositories also clear or delete references explicitly inside their transactions. This mirrors the web implementation and is defense in depth; SQLite enforcement remains the final protection.
 
-### SQLite schema (`macrozone.db`, schema version 3)
+### SQLite schema (`macrozone.db`, schema version 4)
 
 | Table | Purpose | Key columns and constraints |
 | ----- | ------- | --------------------------- |
@@ -234,8 +268,9 @@ Each repository getter is split into a native file (SQLite) and a `.web.ts` file
 | `saved_meals` / `saved_meal_items` (v3) | Reusable groups of foods | items: `saved_meal_id → saved_meals ON DELETE CASCADE`, `position` (unique per saved meal), `food_id → foods ON DELETE SET NULL`, food snapshot (name, serving, nutrition), `amount` (> 0) |
 | `recipes` / `recipe_ingredients` (v3) | Recipes built from foods | `servings` (> 0); ingredients: `recipe_id → recipes ON DELETE CASCADE`, `position`, `food_id → foods ON DELETE SET NULL`, food snapshot, `amount` |
 | `meal_entry_sources` (v3) | Immutable snapshot of what a logged meal was added from (one per meal at most) | `meal_id → meals ON DELETE CASCADE` (primary key), `source_type` (food or recipe), `food_id` / `recipe_id` / `saved_meal_id` (each `ON DELETE SET NULL`), `log_group_id`, source name, serving, base nutrition, amount, `logged_at` |
+| `meal_entry_ai_sources` (v4) | Snapshot of a meal added from a reviewed AI estimate (one per meal at most) | `meal_id → meals ON DELETE CASCADE` (primary key), `input_kind` (text or photo), `meal_title`, `item_name` (1–80 characters), `amount` (> 0), `unit` (g, ml, serving, piece, cup, tbsp, tsp), `matched_food_id → foods ON DELETE SET NULL`, `log_group_id` (required), `logged_at` |
 
-Indexes: meals `(local_date, local_time, created_at)`, `(local_date, meal_type)`, `(created_at)`; foods `(name_key, id)`, `(is_favorite, name_key, id)`, and the unique definition index; saved meals and recipes `(name_key, id)`; item and ingredient `food_id`; entry sources `(food_id, logged_at)`, `(logged_at)`, `(log_group_id)`.
+Indexes: meals `(local_date, local_time, created_at)`, `(local_date, meal_type)`, `(created_at)`; foods `(name_key, id)`, `(is_favorite, name_key, id)`, and the unique definition index; saved meals and recipes `(name_key, id)`; item and ingredient `food_id`; entry sources `(food_id, logged_at)`, `(logged_at)`, `(log_group_id)`; AI entry sources `(log_group_id)`, `(matched_food_id)`.
 
 Onboarding status (`completed` or `skipped`) is stored in `app_metadata` under the key `onboarding`. Saving goals writes the profile (when calculated), goals, and status in one exclusive transaction. On web, the whole plan is one JSON value under the AsyncStorage key `nutrition_plan`.
 
@@ -246,7 +281,6 @@ Onboarding status (`completed` or `skipped`) is stored in `app_metadata` under t
 - A database created by a newer app version is refused rather than modified.
 - Version 2 adds `user_profile` and `nutrition_goals` without changing existing tables.
 - Version 3 adds the food library, saved meals, recipes, and meal entry snapshots. It only creates new tables and indexes; existing meals, goals, and recovery records are not changed.
-- Future data (measurements) will be added as new numbered migrations in the phases that introduce those features. Meal reminders are device settings and are stored in AsyncStorage, not SQLite.
 
 ### Migration from AsyncStorage
 
@@ -301,6 +335,186 @@ Running the import again is safe: the marker is checked before and inside the tr
 
 - The library is one versioned JSON value under `food_library` (`version: 1`). Each change is written in a single `setItem`, which keeps multi-item changes atomic within a tab.
 - Malformed entries are skipped when reading, and the original value is copied to `food_library_unreadable_backup` before the first overwrite. A payload from a newer version is refused for reading and writing.
+
+## AI meal estimates
+
+### Architecture and why
+
+```text
+AiMealScreen → useAiMealFlow → aiMealService → AI endpoint client ──HTTPS──▶ MacroZone AI service (server/)
+                                            → preferences repository                 │
+                                            → food library (local matching)          ▼
+                                            → DiaryLogRepository (atomic save)   Provider adapter ──▶ Anthropic API
+```
+
+- The app never talks to an AI provider and never holds a provider key. It only knows the MacroZone AI endpoint URL, set at build time with `EXPO_PUBLIC_AI_ENDPOINT_URL` (a public URL, not a secret). HTTPS is required; plain HTTP is accepted only for local network hosts in development builds. When the variable is missing or invalid, AI is shown as unavailable and manual logging stays available.
+- MacroZone had no backend, so the AI boundary is a small standalone Node.js service in `server/`. It has one runtime dependency (the official Anthropic SDK), no web framework, and runs anywhere Node.js 22.18+ runs. It is not an Expo API route, which would couple the secret-holding code to the app's routing and change the web build to server output.
+- The server uses a provider-agnostic `MealAnalysisProvider` interface (`analyze(input, { signal, deadlineAt })`). The Anthropic adapter is the only implementation; another provider can be added without changing the app or the contract.
+
+### Models, retries, and fallbacks
+
+- **Default model:** `claude-sonnet-5`, a better latency and cost balance for nutrition extraction than Opus.
+- **Allowed models:** `AI_MODEL` accepts only an explicit allowlist of models that support image input, structured outputs, and every effort level: `claude-sonnet-5` (default) and `claude-opus-5`. Any other value stops the server at startup.
+- **Request shape:** the non-beta Messages API with `output_config.format` (JSON Schema) and `output_config.effort` (default `medium`), `max_tokens` from `AI_MAX_OUTPUT_TOKENS` (default 8,000, which leaves room for adaptive thinking and bounds the output cost of each attempt), and no tools.
+- **No fallbacks:** provider fallbacks are disabled, so a request is never silently served by a model that was not approved. The model that answered is written to the server log for diagnostics; it is not sent to the app or stored with diary entries.
+- **Retries:** the SDK's automatic retries are turned off and the service retries itself.
+  - Only connection failures, attempt timeouts, and provider server errors (including overloaded responses) are retried, up to `AI_PROVIDER_MAX_RETRIES` times (default 1, at most 2), with jittered exponential backoff (250–500 ms, then 500–1,000 ms, capped at 4 s).
+  - Validation failures, refusals, truncated or malformed output, bad requests, and rejected credentials are never retried.
+  - A provider rate limit is retried only when it includes `retry-after` and that wait plus a minimum attempt time still fits inside the request deadline (and a retry remains); otherwise the service returns `AI_RATE_LIMITED` right away.
+  - Every attempt's timeout is the smaller of `AI_PROVIDER_TIMEOUT_MS` and the time left before the request deadline, and no attempt starts with less than 2 seconds left.
+  - Cancellation (the client disconnecting or the deadline passing) interrupts a pending backoff and prevents another attempt.
+  - Retries belong to the same user request: they use the same concurrency slot and the same single unit of the daily budget.
+
+### Request and response contract (version 1)
+
+`POST /v1/meal-analysis` with `content-type: application/json` and `x-macrozone-rate-limit-key: <UUID v4>`:
+
+```json
+{ "version": 1, "inputKind": "text", "text": "200 g grilled chicken with 150 g rice" }
+{ "version": 1, "inputKind": "photo", "image": { "mediaType": "image/jpeg", "base64": "<JPEG data>" }, "note": "grilled, no oil" }
+```
+
+Success (`200`):
+
+```json
+{
+  "version": 1,
+  "status": "ok",
+  "result": {
+    "analysisId": "<request id>",
+    "inputKind": "text",
+    "title": "Chicken and rice",
+    "items": [
+      { "name": "Grilled chicken", "amount": 200, "unit": "g", "calories": 330, "protein": 62, "carbs": 0, "fat": 7.2, "confidence": "high", "note": null, "uncertainties": [] }
+    ],
+    "totals": { "calories": 330, "protein": 62, "carbs": 0, "fat": 7.2 },
+    "quality": "medium",
+    "warnings": []
+  }
+}
+```
+
+Clarification (`200`), when one critical ambiguity prevents a meaningful estimate:
+
+```json
+{ "version": 1, "status": "needs_clarification", "clarification": { "analysisId": "<request id>", "inputKind": "photo", "question": "Is the brown dish a lentil curry or a meat stew?" } }
+```
+
+Errors: `{ "version": 1, "status": "error", "error": { "code", "message", "retryable" } }` with these codes:
+
+| Code | HTTP | Meaning |
+| ---- | ---- | ------- |
+| `AI_UNAVAILABLE` | 503 (with `retry-after` when overloaded or out of budget) | Provider failure, server at its concurrency limit, daily budget used up, or the budget store failing |
+| `AI_TIMEOUT` | 504 | The deadline passed |
+| `AI_RATE_LIMITED` | 429 (with `retry-after` when known) | A per-key or per-IP limit, or a provider rate limit that could not be honored in time |
+| `INVALID_INPUT` | 400, 403, 405, 413, 415, 422 | Invalid body, missing or malformed rate-limit key, disallowed browser origin, wrong method or type, too large, or content that is not a meal |
+| `INVALID_IMAGE` | 400, 422 | The image type, size, or contents are invalid, or the photo is too blurry, dark, or cropped to estimate |
+| `INVALID_AI_RESPONSE` | 502 | The model output failed validation |
+| `UNAUTHORIZED` | 401 | Reserved for a gateway or future real authentication; the service itself does not authenticate callers |
+| `SERVER_ERROR` | 500 | Unexpected failure |
+
+The app adds `OFFLINE` (the request could not reach the service) and `NOT_CONFIGURED`, and maps every code to a user-facing message. `GET /v1/health` returns only `{ "status": "ok" }`, with no model, key, limits, or configuration.
+
+Limits: text 3–500 characters after normalization; an optional photo note up to 300 characters; photos JPEG, PNG, or WebP up to 1.1 MB decoded (request body up to 1.6 MB); up to 20 items; names up to 80 characters; amounts up to 100,000; up to 10,000 kcal and 1,000 g per macro per item; up to 8 warnings; clarification questions up to 200 characters.
+
+### Security posture and deployment
+
+**The service is not authenticated.** The `x-macrozone-rate-limit-key` header is a random UUID the app generates once and stores locally. It only lets the service apply per-installation rate limits. Anyone can generate a new one, so it is an abuse-control key, not an identity or a credential, and a missing or malformed key is an invalid request (`400`), not an authentication failure. The app contains no shared secret, because anything shipped in an app can be extracted.
+
+**Where it is suitable today:** local development, internal testing, or production behind a protected gateway that authenticates callers or verifies the app (for example Play Integrity on Android and App Attest on iOS) and applies its own quotas. It is not secure as a directly exposed public endpoint. A public release should add real user authentication and/or platform attestation at a gateway in front of this service.
+
+**Controls in the service:**
+
+- **Server-wide concurrency limit** (`AI_MAX_CONCURRENT_REQUESTS`): requests that would call the provider take a slot; when all slots are busy the request is rejected immediately with `503` and `retry-after: 5`. There is no queue. A slot is held until the provider call has actually finished, even if the client has already received a timeout.
+- **Server-wide daily request budget** (`AI_DAILY_REQUEST_BUDGET`, per UTC day): one unit is used by each valid request that reaches the provider, whatever key or IP it comes from, so forged or rotating rate-limit keys cannot get around it. When it is used up, or when the budget store fails, the service fails closed with `503` until the next UTC day. Invalid requests and requests rejected at the concurrency limit do not use the budget. Together with `AI_MAX_OUTPUT_TOKENS`, the retry limit, and the input limits, this bounds the daily provider cost.
+- **Secondary limits:** sliding-window limits per client IP (per minute) and per rate-limit key (per minute and per day), checked before the body is parsed.
+- **Trusted proxies** (`AI_TRUSTED_PROXIES`, empty by default): `x-forwarded-for` is ignored unless the direct peer's address is listed. When it is, the client IP is the nearest address in the header, reading from the right, that is not itself a trusted proxy; a malformed entry falls back to the peer address. Entries a client adds to the left of the chain are never used.
+- **Other safeguards:** CORS origin allowlist (HTTPS origins only in production), a streaming body limit, header and request timeouts, a request deadline that cancels the provider call, and cancellation when the client disconnects.
+
+**Storage of limits:** counters are kept in memory (`usageStore: memory` in the startup log). They reset when the process restarts and are not shared between instances. Running more than one instance, or restarting often, needs a shared external store (for example Redis or a database) for rate limits and the daily budget; that store is not implemented yet.
+
+**Production mode:** with `NODE_ENV=production` the service refuses to start unless all of these are set explicitly:
+
+- `AI_DEPLOYMENT=protected-gateway-single-instance`, which confirms that the service runs as one instance behind a protected gateway;
+- `AI_MAX_CONCURRENT_REQUESTS`;
+- `AI_DAILY_REQUEST_BUDGET`.
+
+Development needs only `ANTHROPIC_API_KEY` and listens on `127.0.0.1` by default (set `HOST=0.0.0.0` to reach it from a phone on the local network).
+
+### Secrets and configuration
+
+The provider key exists only in the server's environment. It is never in the app, `app.json`, `EXPO_PUBLIC_*` variables, source, AsyncStorage, SQLite, logs, or committed example files. `server/.env*` is ignored by Git. Configuration is validated at startup; an invalid configuration stops the server and logs only the names of the invalid variables, never their values.
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `ANTHROPIC_API_KEY` | required | Provider key (server only) |
+| `NODE_ENV` | development | `production` enables the required deployment checks above |
+| `AI_DEPLOYMENT` | none (required in production) | Must be `protected-gateway-single-instance` |
+| `AI_MODEL` | `claude-sonnet-5` | One of `claude-sonnet-5`, `claude-opus-5` |
+| `AI_EFFORT` | `medium` | `low`, `medium`, `high`, `xhigh`, or `max` |
+| `AI_MAX_OUTPUT_TOKENS` | `8000` | Output token limit per attempt (1,024–32,000) |
+| `AI_MAX_CONCURRENT_REQUESTS` | `4` (required in production) | Provider calls in flight at once (1–256) |
+| `AI_DAILY_REQUEST_BUDGET` | `200` (required in production) | Provider-bound requests per UTC day (1–1,000,000) |
+| `PORT`, `HOST` | `8787`, `127.0.0.1` (`0.0.0.0` in production) | Listen address |
+| `AI_REQUEST_TIMEOUT_MS` | `45000` | Deadline for a whole request, including retries |
+| `AI_PROVIDER_TIMEOUT_MS` | `30000` | Timeout per provider attempt (must be lower than the request deadline) |
+| `AI_PROVIDER_MAX_RETRIES` | `1` | Retries for transient provider failures (0–2) |
+| `AI_RATE_LIMIT_PER_MINUTE`, `AI_RATE_LIMIT_PER_DAY` | `6`, `100` | Requests per rate-limit key |
+| `AI_IP_RATE_LIMIT_PER_MINUTE` | `30` | Requests per client IP |
+| `AI_ALLOWED_ORIGINS` | none | Comma-separated browser origins allowed by CORS (needed for the web app) |
+| `AI_TRUSTED_PROXIES` | none | Comma-separated IP addresses of proxies whose `x-forwarded-for` is trusted |
+
+Run locally with `npm run server:install`, then provide the variables through your shell or a secrets manager and run `npm run server:start`.
+
+### Validation and prompt injection
+
+- **Input:** POST and JSON only; strict text limits; the declared image type must match the file's magic bytes. Provider errors are mapped to the codes above; raw provider errors, prompts, and stack traces are never returned or logged.
+- **Prompt injection:** the system prompt restricts the model to nutrition extraction and tells it to treat the description and the photo as untrusted data and ignore instructions inside them. The description is wrapped in delimiters after control characters and `<` / `>` are removed, so it cannot close them. Users cannot change the system prompt, schema, limits, model, or configuration. The model has no tools, and its output is only data: it never builds queries, runs SQL, or writes storage.
+- **Output is never trusted:** generation is schema-constrained, and the server still validates every field independently (types, finite and non-negative numbers, amounts above zero after rounding, known units, limits, item count), cleans text, rounds values, recomputes totals, and flags items whose macros do not match their calories. The app validates the response again at its own boundary and rejects unsupported versions, malformed items, and totals that differ from its own recomputation.
+
+### Plate photos, uncertainty, and clarification
+
+- **Plated meals, not labels.** The photo flow is for a served meal. The system prompt tells the model to analyze only the food and drinks visible on the plate, bowl, or table setting; not to read labels, packaging, or menus; to return each visible component (protein, starch, vegetables, salad, sauces, dressings, toppings, bread, drinks) as its own item; and to estimate portions conservatively from visual cues.
+- **Structured uncertainty.** Each item and the meal as a whole carry uncertainty flags from a fixed list: `portion_size`, `overlapping_foods`, `hidden_ingredients`, `cooking_method`, `added_fat_or_sauce`, and `photo_quality`. The server, not the model, turns them into user-facing warnings with fixed wording and lowers confidence: any flag caps an item or the meal at medium, and `photo_quality` forces low. The review shows the overall confidence, the warnings, and for each item "Less certain because of" the flagged reasons.
+- **Outcomes.** The model must choose `estimate`, `no_food` (an empty plate or a non-food image, returned as `422 INVALID_INPUT`), `unusable_photo` (too blurry, dark, or cropped, returned as `422 INVALID_IMAGE`), or `needs_clarification` with one short question. It is told not to invent confident values to avoid asking.
+- **Clarification.** When a question comes back, nothing is estimated or saved. The screen shows the question; for a photo you answer in the optional Details field, and for text you add the answer to the description, then tap Analyze Again. The note is normalized, limited to 300 characters, and wrapped as untrusted `<user_note>` data in the prompt.
+- **Never exact.** Results are always labeled as estimates, the prompt forbids describing them as exact, and nothing is saved until you tap Add to Diary.
+
+### Nutrition values
+
+The app's Phase 7 math is authoritative. Item values are rounded with decimal-safe 2-decimal rounding, and totals are the sum of rounded items, re-rounded. While reviewing, changing an amount scales the nutrition from the current reference (the AI estimate or a linked food) without converting units; editing nutrition makes the edited values the new reference. Only the reviewed, app-calculated values are saved, within the manual entry limits.
+
+### Local food matching
+
+Matching runs in the app, separately from the provider, and is deterministic. An item is linked automatically only when exactly one library food has the same normalized name and the same serving unit. Otherwise up to three candidates (exact names and simple singular/plural matches) are shown as suggestions, and nothing is chosen for you. During review you can use a suggestion, choose any food from your library, or unlink to restore the AI estimate. Later changes to a food never change saved entries.
+
+### Saving and snapshots
+
+- Each reviewed item becomes one `meals` row, so Home, Diary, editing, copying, and sharing work unchanged. All entries of one estimate are written in a single transaction (SQLite) or a single write (web), with a shared group ID; if anything fails, nothing is saved. Repeated taps are ignored while saving.
+- Provenance is minimal: input kind, meal title, item name, amount, unit, an optional link to the matched food, the group ID, and the time. No prompt, description, photo, raw AI output, model name, confidence, or note is stored. On web the same fields are stored inside the meal record under `macrozoneEntrySource`.
+- Editing or deleting one AI entry affects only that entry. Changing its name or nutrition turns it into a manual entry. AI entries are not used for recent foods.
+
+### Photos and temporary files
+
+- The app requests camera permission only when you tap Take Photo; the photo library picker needs no permission on current Android and iOS versions. The picker is asked not to return EXIF data.
+- A picked or captured photo is re-encoded by `expo-image-manipulator` into a new JPEG (at most 1280 px on the longest side, then smaller sizes and stronger compression until it is 1.1 MB or less).
+- **MacroZone deletes only processed temporary files it creates.** A file is deleted only when both of these hold:
+  - the photo adapter created it with the image manipulator and recorded it in its list of generated files;
+  - its URI is a `file://` URI directly inside the app's own cache folder for processed images (`<cache>/ImageManipulator/`), with a generated UUID `.jpg` name and no `..`, query, or nested path.
+- MacroZone never deletes the URI returned by the image picker or camera, media library originals, `content://` or other shared or provider URIs, arbitrary file URIs, or anything outside that folder. If ownership cannot be established (for example on web, or when the cache path cannot be read), nothing is deleted. Picker-managed temporary copies are left to the operating system's cache cleanup.
+- Processed files are deleted when a larger intermediate attempt is discarded, when the photo is removed or replaced, after the meal is saved, and when you leave the screen. Cleanup can run more than once safely, and a failed deletion is ignored so it never interrupts the flow or navigation.
+
+### Privacy: what leaves the device
+
+- Nothing is sent until you tap Analyze.
+- **Text:** the normalized description, a contract version, and the rate-limit key.
+- **Photo:** the re-encoded JPEG, the optional Details note if you typed one, its media type, a contract version, and the rate-limit key. Before the first photo analysis the app asks for consent to send photos to the AI service; the acknowledgement is stored locally with a version and asked again if the disclosure changes.
+- The service does not store descriptions, photos, prompts, or results. Its logs contain only a request ID, route, status, error code or limit reason, input kind, text length or image size, item count, attempts, the answering model, and duration. The AI provider processes the request under its own data policy.
+- No analytics or tracking are added.
+
+### Reliability
+
+Analysis and saving are single-flight. Every analysis has a request number and its own cancellation; a response for an older request is ignored. Cancel stops the request and keeps your input; leaving the screen cancels any request. The app times out after 60 seconds; the server deadline is shorter. Offline, timeout, rate-limit, overload, invalid-response, and provider failures show a clear message with Try Again where it can help and Log Manually always. Failures keep the text or photo so you can retry.
 
 ## Meal reminders
 
@@ -384,7 +598,9 @@ Business logic is implemented as pure functions and unit-tested with Jest (`npm 
 - Only the current goals and body profile are stored; there is no goal or weight history yet (planned with progress tracking).
 - Changing your weight does not recalculate goals automatically; use Recalculate on the Nutrition Goals screen.
 - Serving amounts use each food's own unit; there is no conversion between units such as grams and cups.
-- There is no online food database or barcode scanning; foods are entered by hand.
+- AI estimates need the separate AI service to be deployed and the app to be built with its URL. The service has no user authentication: it is suitable for development, internal testing, or a single instance behind a protected gateway, not as a directly exposed public endpoint. Its rate limits and daily budget are kept in memory, reset on restart, and are not shared between instances.
+- AI portion and nutrition estimates, especially from photos, can be inaccurate. Unit changes during review are not converted. Local matching compares names only and does not understand synonyms.
+- On web, deleting a food keeps its ID in AI entry snapshots (as for library entries), and the AI service must list the web origin in `AI_ALLOWED_ORIGINS`. The camera option is not offered on web; photos are chosen from files.
 - Copying is available for whole past days to today; copying a single meal section or to another date is not in the UI yet.
 - On web, the food library and meals are separate AsyncStorage values. Deleting a library item on web keeps its old ID inside logged meal snapshots (there are no foreign keys), which is harmless because logged meals never read it for nutrition.
 - The legacy AsyncStorage copy of pre-SQLite meals is kept on the device indefinitely. Removing it will be a separate, explicitly confirmed step.
@@ -411,8 +627,10 @@ Work proceeds one phase at a time:
 5. **Home and diary UX:** design system, light/dark/system themes, safe areas, keyboard handling, a Home dashboard grouped by meal type, and the Diary.
 6. **Reminders and settings:** configurable local meal reminders with permission handling, reconciliation, and notification-tap navigation.
 7. **Fast logging:** food library with servings, recent foods, favorites, saved meals, recipes, a logging hub, and copying a day.
-8. **Progress tracking:** weight, body measurements, trends, charts.
-9. **Accounts and optional cloud sync:** Supabase, with offline use preserved.
-10. **Advanced features:** evaluated and delivered as separate projects (food database, barcode scanning, health platform integrations, and so on).
+8. **AI-assisted logging:** estimates from a description or photo through a secure MacroZone AI service, always reviewed before saving.
+9. **Barcode scanning and online food lookup:** Open Food Facts products with review before save, local caching, and My Foods linking.
+10. **Progress tracking:** weight, body measurements, trends, charts.
+11. **Accounts and optional cloud sync:** Supabase, with offline use preserved.
+12. **Advanced features:** evaluated and delivered as separate projects (health platform integrations and so on).
 
 Nutrition values and future goal calculations are estimates and are not medical advice.
