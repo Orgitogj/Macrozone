@@ -1,3 +1,4 @@
+export { ForgotPasswordScreen } from '@/features/auth/screens/ForgotPasswordScreen';
 export { SignInScreen } from '@/features/auth/screens/SignInScreen';
 export { SignUpScreen } from '@/features/auth/screens/SignUpScreen';
 export { VerifyEmailScreen } from '@/features/auth/screens/VerifyEmailScreen';
