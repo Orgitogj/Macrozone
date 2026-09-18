@@ -24,7 +24,7 @@ The app is currently an early MVP. All data stays on the device, except a meal d
   - Copy and Share are secondary actions at the bottom of the day.
   - If refreshing fails after data has loaded, the data stays visible with a warning and a "Try again" button.
 - **Themes:** System (default), Light, or Dark, chosen on the Nutrition Goals screen and remembered on the device. System follows the device setting and falls back to dark when the device does not report one. The status bar, navigation bars, tab bar, iOS picker sheet, web inputs, and the root background follow the active theme.
-- **Add (logging hub):** the Add tab, Home's contextual Add buttons, and reminder taps open one screen that shows where food will be added (date and meal type) and lets you choose from Recent, Favorites, Foods, Saved Meals, Recipes, AI, or Manual entry.
+- **Add (logging hub):** the Add tab, Home's contextual Add buttons, and reminder taps open one screen that shows where food will be added (date and meal type) and lets you choose from Recent, Favorites, Foods, Saved Meals, Recipes, Barcode, AI, or Manual entry.
   - **Recent** lists the foods you logged most recently from your library, newest first, each once, with the last amount you used.
   - **Favorites** and **Foods** list your food library with local, case-insensitive search. Tap the star on a food to favorite or unfavorite it.
   - Tap a food to choose an amount in its serving unit (with ½×, 1×, and 2× serving shortcuts), review the calculated nutrition, adjust the date and meal type, and add it.
@@ -32,6 +32,10 @@ The app is currently an early MVP. All data stays on the device, except a meal d
   - **Recipes** are built from foods with a total number of servings. They show whole-recipe and per-serving nutrition, and you log them by the serving.
   - Foods, saved meals, and recipes can be created, edited, duplicated (saved meals and recipes), and deleted after confirmation. Editing or deleting them never changes meals you already logged.
   - **AI** opens an estimate from a meal description or a photo. It is available only when the app is built with an AI endpoint; otherwise it says so and offers manual logging.
+- **Barcode lookup (packaged food):** scan a retail barcode with the camera (Android and iOS) or type its number, look the product up on Open Food Facts, review the name, nutrition basis (per 100 g, per 100 ml, or per serving), nutrition, amount, date, and meal type, then tap Add to Diary.
+  - Missing nutrition is never filled in for you: it is shown as missing and must be entered from the package before saving. Community data is always labeled as coming from Open Food Facts.
+  - Optionally save the reviewed product to My Foods. If the barcode is already linked to one of your foods, you choose to keep it or update it (after confirmation).
+  - Products you looked up are kept on the device, so a recent lookup works offline, and older saved data is shown with a clear warning when a refresh fails.
 - **AI meal estimates:** describe a meal or take or choose a photo, tap Analyze, and review the estimate before anything is saved.
   - The review lists each food with its amount, unit, calories, and macros. You can edit the title and every item, remove items, add items, link an item to one of your foods or unlink it, and change the date and meal type. Totals are recalculated by the app as you edit.
   - The screen always states that AI estimates can be inaccurate and are not medical advice, and shows the overall confidence and any warnings. Photo estimates carry an extra caution.
@@ -61,7 +65,7 @@ The app is currently an early MVP. All data stays on the device, except a meal d
 | Navigation    | Expo Router 6 (file-based routing, typed routes)                  |
 | Language      | TypeScript 5.9 (`strict`)                                         |
 | Persistence   | `expo-sqlite` (Android, iOS); `@react-native-async-storage/async-storage` (web meals, legacy data, small preferences) |
-| Device APIs   | `expo-notifications`, `expo-haptics`, `expo-clipboard`, `expo-crypto`, `expo-image-picker`, `expo-image-manipulator`, `expo-file-system` |
+| Device APIs   | `expo-notifications`, `expo-haptics`, `expo-clipboard`, `expo-crypto`, `expo-image-picker`, `expo-image-manipulator`, `expo-file-system`, `expo-camera` |
 | AI service    | Standalone Node.js service in `server/` (no framework) using the official `@anthropic-ai/sdk` |
 | Pickers       | `@react-native-community/datetimepicker` (Android and iOS; web uses HTML inputs) |
 | Tooling       | ESLint 9 (`eslint-config-expo`), Expo Doctor, React Compiler (experimental) |
@@ -118,6 +122,7 @@ src/
     meal/new.tsx              Add hub preset from Home or a reminder (?date=&mealType=), manual entry (&mode=manual),
                               or a duplicate (?duplicateOf=<id>)
     ai-meal.tsx               AI estimate and review (?date=&mealType=&input=text|photo)
+    barcode.tsx               Barcode scan or entry, product review, and logging (?date=&mealType=&mode=scan|manual)
     food/, saved-meal/,       new.tsx (create), [id]/index.tsx (details and logging), [id]/edit.tsx (edit);
     recipe/                   routes carry the diary destination (?date=&mealType=)
     onboarding.tsx            First-run goal setup (shown only while the onboarding gate requires it)
@@ -170,6 +175,21 @@ src/
       utils/                  Pure logic: settings model and parsing, notification payloads, permission mapping,
                               reconciliation planning, tap-to-route mapping, status text
     settings/                 Appearance (theme) settings
+    barcode/
+      adapters/               Camera permission and external link adapter
+      components/             Scanner panel, manual barcode form, product review form, lookup notices,
+                              product image, Open Food Facts attribution, Add hub entry panel
+      hooks/                  useBarcodeFlow (lookup, review, save), useBarcodeScanner (permission, scan lock,
+                              focus and background pause), useBarcodeNavigation
+      providers/              OnlineFoodProvider interface and the Open Food Facts adapter (config, request,
+                              response parsing, rate-limited transport)
+      repositories/           Product cache, barcode-to-food links, and the all-or-nothing barcode log
+                              (SQLite transaction and compensated AsyncStorage write), getters (.web)
+      screens/                Barcode
+      services/               Product lookup with cache policy, barcode logging and My Foods saving
+      utils/                  Pure logic: GTIN validation and normalization, nutrition bases, review draft,
+                              cache payloads and pruning, flow reducer, request rate limiter, accessibility labels,
+                              save operation IDs and the Update My Food confirmation choice
     ai-meal/
       adapters/               AI endpoint client (the only network call in the app) and photo picker/processing adapter
                               that tracks and deletes only the processed files it creates
@@ -255,7 +275,7 @@ Each repository getter is split into a native file (SQLite) and a `.web.ts` file
 - Transactions run on that same foreign-key-enabled connection (`BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`), and a queue keeps other statements from interleaving with them. `expo-sqlite`'s own `withExclusiveTransactionAsync` is not used, because it opens a separate connection on which the pragma has not been set.
 - Repositories also clear or delete references explicitly inside their transactions. This mirrors the web implementation and is defense in depth; SQLite enforcement remains the final protection.
 
-### SQLite schema (`macrozone.db`, schema version 4)
+### SQLite schema (`macrozone.db`, schema version 5)
 
 | Table | Purpose | Key columns and constraints |
 | ----- | ------- | --------------------------- |
@@ -269,8 +289,11 @@ Each repository getter is split into a native file (SQLite) and a `.web.ts` file
 | `recipes` / `recipe_ingredients` (v3) | Recipes built from foods | `servings` (> 0); ingredients: `recipe_id → recipes ON DELETE CASCADE`, `position`, `food_id → foods ON DELETE SET NULL`, food snapshot, `amount` |
 | `meal_entry_sources` (v3) | Immutable snapshot of what a logged meal was added from (one per meal at most) | `meal_id → meals ON DELETE CASCADE` (primary key), `source_type` (food or recipe), `food_id` / `recipe_id` / `saved_meal_id` (each `ON DELETE SET NULL`), `log_group_id`, source name, serving, base nutrition, amount, `logged_at` |
 | `meal_entry_ai_sources` (v4) | Snapshot of a meal added from a reviewed AI estimate (one per meal at most) | `meal_id → meals ON DELETE CASCADE` (primary key), `input_kind` (text or photo), `meal_title`, `item_name` (1–80 characters), `amount` (> 0), `unit` (g, ml, serving, piece, cup, tbsp, tsp), `matched_food_id → foods ON DELETE SET NULL`, `log_group_id` (required), `logged_at` |
+| `meal_entry_product_sources` (v5) | Snapshot of a meal added from a reviewed barcode product (one per meal at most) | `meal_id → meals ON DELETE CASCADE` (primary key), `provider` (open_food_facts), `barcode` (8–14 digits, text), `provider_product_name`, `item_name`, `basis_amount` / `basis_unit` (g, ml, serving), reviewed base nutrition, `amount`, `user_reviewed`, `looked_up_at`, `provider_modified_at`, `food_id → foods ON DELETE SET NULL`, `log_group_id`, `logged_at` |
+| `food_barcodes` (v5) | Links a barcode to one of your foods | `barcode` (primary key, 8–14 digits), `food_id → foods ON DELETE CASCADE`, `linked_at` |
+| `online_product_cache` (v5) | Normalized product lookups kept for offline use (not the raw response) | `(provider, barcode)` primary key, `status` (found or not_found), `payload_version`, `payload_json` (normalized product, valid JSON, only when found), `fetched_at`, `stale_at`, `expires_at`, `provider_modified_at` |
 
-Indexes: meals `(local_date, local_time, created_at)`, `(local_date, meal_type)`, `(created_at)`; foods `(name_key, id)`, `(is_favorite, name_key, id)`, and the unique definition index; saved meals and recipes `(name_key, id)`; item and ingredient `food_id`; entry sources `(food_id, logged_at)`, `(logged_at)`, `(log_group_id)`; AI entry sources `(log_group_id)`, `(matched_food_id)`.
+Indexes: meals `(local_date, local_time, created_at)`, `(local_date, meal_type)`, `(created_at)`; foods `(name_key, id)`, `(is_favorite, name_key, id)`, and the unique definition index; saved meals and recipes `(name_key, id)`; item and ingredient `food_id`; entry sources `(food_id, logged_at)`, `(logged_at)`, `(log_group_id)`; AI entry sources `(log_group_id)`, `(matched_food_id)`; product entry sources `(food_id)`, `(barcode)`; food barcodes `(food_id)`; product cache `(fetched_at, provider, barcode)`, `(expires_at)`.
 
 Onboarding status (`completed` or `skipped`) is stored in `app_metadata` under the key `onboarding`. Saving goals writes the profile (when calculated), goals, and status in one exclusive transaction. On web, the whole plan is one JSON value under the AsyncStorage key `nutrition_plan`.
 
@@ -281,6 +304,9 @@ Onboarding status (`completed` or `skipped`) is stored in `app_metadata` under t
 - A database created by a newer app version is refused rather than modified.
 - Version 2 adds `user_profile` and `nutrition_goals` without changing existing tables.
 - Version 3 adds the food library, saved meals, recipes, and meal entry snapshots. It only creates new tables and indexes; existing meals, goals, and recovery records are not changed.
+- Version 5 adds `online_product_cache`, `food_barcodes`, and `meal_entry_product_sources` with their indexes. It only creates new tables; existing meals, foods, snapshots, goals, and recovery records are not changed.
+- Version 4 adds `meal_entry_ai_sources` and its indexes. It is a separate table because the CHECK constraints of `meal_entry_sources` cannot be changed in place; no existing row is changed or recalculated.
+- Future data (measurements) will be added as new numbered migrations in the phases that introduce those features. Meal reminders are device settings and are stored in AsyncStorage, not SQLite.
 
 ### Migration from AsyncStorage
 
@@ -516,6 +542,91 @@ Matching runs in the app, separately from the provider, and is deterministic. An
 
 Analysis and saving are single-flight. Every analysis has a request number and its own cancellation; a response for an older request is ignored. Cancel stops the request and keeps your input; leaving the screen cancels any request. The app times out after 60 seconds; the server deadline is shorter. Offline, timeout, rate-limit, overload, invalid-response, and provider failures show a clear message with Try Again where it can help and Log Manually always. Failures keep the text or photo so you can retry.
 
+## Barcode scanning and online food lookup
+
+### Flow and architecture
+
+```text
+BarcodeScreen → useBarcodeScanner (expo-camera) ─┐
+             → useBarcodeFlow → productLookupService → ProductCacheRepository (SQLite | AsyncStorage)
+                               │                     → OnlineFoodProvider → Open Food Facts adapter ──HTTPS──▶ world.openfoodfacts.org
+                               └→ barcodeLogService → BarcodeLogRepository (one SQLite transaction | compensated AsyncStorage write)
+```
+
+- The Add hub has a Barcode mode with Scan Barcode (Android and iOS) and Enter Barcode. The date and meal type from Home, reminders, or the hub travel through the whole flow, and future dates are blocked.
+- Screens, components, and hooks never call Open Food Facts, SQLite, or AsyncStorage. The provider is behind the provider-neutral `OnlineFoodProvider` interface (lookup by barcode, found / not found / failed outcomes, availability, product page URL).
+- Nothing is saved until you tap Add to Diary. A lookup never saves anything by itself.
+
+### Scanner
+
+- Uses `expo-camera` (`CameraView` with `onBarcodeScanned`). Camera permission is requested only when you start scanning. If access is denied, the screen explains it and offers Open Settings when the system will no longer ask. Typing the barcode is always available.
+- Only retail symbologies are enabled: `ean13`, `ean8`, `upc_a`, and `itf14`. QR codes and other symbologies are ignored. UPC-E is not enabled, because its value needs an expansion step that Open Food Facts does not document for lookups.
+- The first valid callback locks the scanner; repeated callbacks are ignored until you tap Scan Again. Invalid data (wrong length, bad check digit, text or links) is rejected with a message and never sent anywhere.
+- The camera runs only while the scanner is open, the screen is focused, and the app is in the foreground; the torch turns off whenever it stops, and the camera view is unmounted when scanning ends or the screen closes.
+- Web: `expo-camera` scans only QR codes in the browser, so the web app offers manual entry only.
+
+### Barcode validation and normalization
+
+- Accepted formats: EAN-8 (8 digits), UPC-A (12), EAN-13 (13), and GTIN-14 (14). Manual input may contain spaces or single hyphens between digit groups; anything else (letters, punctuation, control characters, links) is rejected, and input is limited to 32 characters.
+- The GS1 mod-10 check digit is validated. Barcodes are always strings, never JavaScript numbers, so leading zeros are kept.
+- Normalization follows the Open Food Facts rule exactly: after removing leading zeros, codes with 7 digits or fewer are padded to 8, and codes with 9–12 digits are padded to 13. The same product therefore has one key whether the scanner returns 12 or 13 digits. On iOS, `expo-camera` reports UPC-A as `ean13` with the leading zero removed (12 digits); on Android ML Kit reports `upc_a` with 12 digits. Both normalize to the same 13-digit code.
+
+### Open Food Facts request
+
+- **Endpoint:** `GET https://world.openfoodfacts.org/api/v3.6/product/{barcode}?product_type=food&fields=code,product_type,product_name,brands,quantity,serving_size,nutrition,selected_images,last_modified_t` — read-only, no account, no cookies (`credentials: omit`), no writes, no photo uploads.
+- **Identification:** every request sends `User-Agent: MacroZone/<app version> (<contact>)`, as the Open Food Facts API policy requires. The app version comes from `app.json`. The contact comes from `EXPO_PUBLIC_OPEN_FOOD_FACTS_CONTACT` (an email address or HTTPS URL; placeholder domains such as example.com are rejected). **No contact is committed.** Without a valid contact, online lookup is disabled and the app says so (development builds also show how to set it); cached products, Create Food, and manual logging still work.
+- **The contact is public:** like every `EXPO_PUBLIC_*` variable, it is compiled into the JavaScript bundle and anyone with the app can read it, and it is also sent to Open Food Facts in every request. Use a contact address or page intended to be public for the project or its support (for example a project support mailbox or an issues page), never a private personal email address. Set it in your local, untracked environment or your build service's environment, never in a committed file.
+- **Environment:** `EXPO_PUBLIC_OPEN_FOOD_FACTS_ENV` is `production` or `staging`. When it is not set, development builds use the staging server (`world.openfoodfacts.net` with its documented public `off:off` login) and release builds use production. Automated tests never call either.
+- **Web:** browsers do not allow setting `User-Agent`, so a compliant direct request is not possible. Online lookup is unavailable on the web, and no proxy is used (a shared proxy would put every user behind one IP address and its per-IP limit).
+- **Rate limits:** Open Food Facts allows 15 product reads per minute per IP address. Requests go directly from each device, and the app additionally limits itself to 10 requests per minute. There is no search-as-you-type; one scan or submit makes one lookup unless you tap Try Again.
+- **Errors and retries:** 404 means not found and is not retried. 429 and 503 are not retried; their `Retry-After` (seconds or HTTP date, default 60 seconds for 429) blocks further requests until it passes. A network failure, timeout (10 seconds per attempt, 15 seconds in total), or 500/502/504 is retried once after a 500–1,000 ms jittered delay. Other statuses are treated as unusable responses. Leaving the screen or tapping Cancel aborts the request.
+
+### Response validation and nutrition mapping
+
+- The envelope must have a known status, and the product code must normalize to the requested barcode. Non-food product types are treated as not found. Malformed JSON, oversized bodies, and unexpected shapes become a "could not read" error; unknown extra fields are ignored.
+- Nutrition comes from the v3.5+ `nutrition` structure: the `aggregated_set` (per 100 g or 100 ml, as sold) and label `input_sets` with `per: serving` (manufacturer or packaging source, `per_quantity` with `per_unit` g or ml). Prepared-product sets are not used.
+- Each nutrient is read separately: calories from `energy-kcal` (unit kcal), protein from `proteins`, carbs from `carbohydrates`, fat from `fat` (unit g). A value of zero is a real value; an absent key or value is missing; a value with `source: estimate`, a wrong unit, a negative number, or an unknown modifier is not used. Values with `<`, `<=`, `>`, `>=`, or `~` modifiers are used but marked approximate. The generic `energy` field is never used. When kcal is absent, `energy-kj` is converted once with `kilojoulesToKilocalories` (÷ 4.184) and marked as converted.
+- **Bases offered:** per 100 g or per 100 ml when that set has at least one usable value, and per serving when the serving set is consistent with the per-100 values (within 12%, with minimums of 5 kcal and 1.5 g) and within MacroZone's limits. A per-100 set with more than 105 g of macros or 950 kcal is impossible and is not used. Calories that differ from 4 × protein + 4 × carbs + 9 × fat by more than 35% (minimum 40 kcal) show a warning. If no basis is usable, you enter the nutrition yourself per 100 g, per 100 ml, or per serving.
+- **No guessing:** textual servings such as "1 package" are shown only as text; they are never parsed into amounts. Grams, milliliters, and servings are never converted into each other.
+- **MacroZone calculates:** consumed values use the Phase 7 serving math and decimal-safe 2-decimal rounding, and every value is checked against the food and diary limits.
+
+### Review, saving, and My Foods
+
+- The review screen shows the product photo (when available), name, brand, barcode, package size, the Open Food Facts attribution with a link to the product page, data warnings, the basis, editable nutrition with missing values marked, the amount, what will be added, and the date and meal type.
+- Saving creates one diary entry with an immutable `meal_entry_product_sources` snapshot (on the web, inside the meal record under `macrozoneEntrySource`): barcode, provider, provider product name, reviewed name, basis, reviewed base nutrition, amount, whether you edited the product, lookup time, provider modification time, and an optional link to your food. The raw response is never stored. Cache refreshes, changes to Open Food Facts, and edits or deletion of a linked food do not change it. Editing the entry's name or nutrition turns it into a manual entry, and Copy Day creates an independent snapshot. Barcode entries are not used for Recent foods.
+- **Also save to My Foods** (off by default) saves the reviewed name, basis, and nutrition as a food, reusing an existing identical food instead of creating a duplicate, and links the barcode to it (`food_barcodes`). If the barcode is already linked, you choose Keep My Food, Update My Food, or Use My Food's Values (which copies the food's values into the review and keeps the food unchanged); updating asks for confirmation first, and cancelling saves nothing. A barcode is linked to at most one food, and a food is never overwritten automatically.
+
+### All-or-nothing saving
+
+Add to Diary saves the diary entry, its product snapshot, and any My Foods change together, or saves nothing.
+
+- **Android and iOS (SQLite):** `BarcodeLogRepository.commit` runs one `BEGIN IMMEDIATE` transaction on the app's foreign-key-enabled connection, inside the shared local write queue. In order it checks whether this operation was already saved, finds or creates the food (reusing an identical one) or applies the confirmed update, creates the barcode link if needed, inserts the meal, and inserts the product snapshot. It commits only after every step succeeds; any failure, including a failed `COMMIT`, rolls everything back. There are no nested transactions.
+- **Web (AsyncStorage):** there are no multi-key transactions, so the web repository compensates. Inside the same shared write queue used by every MacroZone write on the web, it reads the exact previous values of the affected keys (`food_library`, `food_barcode_links`, their unreadable-data backups, and the meals list), computes and validates the complete next state in memory, and writes only the keys that change in one `multiSet` (or one `setItem` per key when `multiSet` is unavailable). If any write fails, it restores every touched key to its previous value (removing keys that did not exist) and reads them back to verify. The meal and its product snapshot are one record in one key, so they are always written together.
+- **Web guarantee and limits:** within one open tab, other MacroZone writes never interleave with the save, and after a failure the app returns to exactly the previous data. This is not crash-level atomicity: if the tab or browser closes in the middle of a save, or another tab writes at the same time, a partial change can remain. If restoring fails, the app says "MacroZone could not finish saving and could not fully undo the change" and asks you to check your diary and My Foods instead of claiming nothing was saved; retrying is safe (see below).
+- **Why not one web aggregate:** keeping foods, links, and diary entries in one new versioned value would make the write a single `setItem`, but it would mean moving the existing `food_library` (Phase 7) and meals data into a new format. Rewriting unrelated legacy data carries more risk than the compensated write, so the existing keys are kept.
+- **Retries and repeated taps:** every save has a stable operation ID, which becomes the diary entry's ID. The screen keeps the same ID while the reviewed values, destination, and food choice are unchanged, so tapping again after a failure retries the same operation. If that operation was already saved, the save returns the existing entry instead of adding another; if the ID was used with different values, nothing is saved. A retry never creates a second food, link, diary entry, or snapshot. After a successful save the ID is cleared, so logging the same product again later creates a new entry. Repeated taps while saving are ignored.
+- If a linked food was deleted or the barcode was linked to another food since the review opened, nothing is saved and the review reloads the current link.
+
+### Cache
+
+- One entry per provider and normalized barcode, storing only the normalized product fields MacroZone uses.
+- **Found products:** fresh for 7 days (returned without a network request), then refreshed on the next lookup. If the refresh fails, the saved product is shown with a warning that it could not be refreshed. After 180 days an entry expires and is offered only as an explicit "Use Saved Copy" choice after a failed lookup, then pruned.
+- **Not found:** remembered for 24 hours. **Failures** (offline, timeout, rate limit, unavailable, unreadable response) are never cached.
+- At most 500 entries; pruning removes expired entries, then keeps the most recently fetched (ties by provider and barcode). Pruning touches only the cache, never diary snapshots or foods.
+- A write never replaces an entry fetched later than it, or an entry written by a newer app version. Unreadable SQLite rows are ignored and replaced only by a newer successful lookup. On the web, the cache is one versioned AsyncStorage value (`online_product_cache`, version 1); unreadable data is copied to `online_product_cache_unreadable_backup` before the first overwrite, and a newer version is refused. Barcode links on the web use `food_barcode_links` (version 1) with the same rules.
+
+### Images, attribution, and licensing
+
+- Product photos are shown only from HTTPS URLs on Open Food Facts image hosts, loaded by React Native's `Image` without credentials, and never saved by MacroZone. A photo that fails to load is hidden; it never blocks logging. Photos may not match the current package.
+- The review screen, the Barcode hub panel, the barcode screen, and a Data sources card on the Nutrition Goals screen show "Data from Open Food Facts" with a link to openfoodfacts.org or the product page. Cached products keep the attribution.
+- Open Food Facts data is available under the [Open Database License (ODbL 1.0)](https://opendatacommons.org/licenses/odbl/1-0/), and individual contents under the [Database Contents License (DbCL 1.0)](https://opendatacommons.org/licenses/dbcl/1-0/). Reuse requires attribution with a link, and derivative databases that are shared must use the same license. MacroZone only keeps a small per-device cache of looked-up products and does not redistribute the database.
+- Product images are available under [Creative Commons Attribution-ShareAlike 3.0](https://creativecommons.org/licenses/by-sa/3.0/) and are credited to Open Food Facts contributors where shown; images can contain third-party elements (such as logos) with their own rights.
+- MacroZone is not affiliated with or endorsed by Open Food Facts. Open Food Facts does not guarantee the accuracy of its data, and MacroZone presents it as community data that must be reviewed, never as medical advice.
+
+### What leaves the device
+
+Only the normalized barcode, the requested field list, and the User-Agent (app name, version, and configured contact) are sent to Open Food Facts, and only when you look up a product. Nothing about your diary, foods, or account is sent.
+
 ## Meal reminders
 
 ### Architecture
@@ -598,6 +709,8 @@ Business logic is implemented as pure functions and unit-tested with Jest (`npm 
 - Only the current goals and body profile are stored; there is no goal or weight history yet (planned with progress tracking).
 - Changing your weight does not recalculate goals automatically; use Recalculate on the Nutrition Goals screen.
 - Serving amounts use each food's own unit; there is no conversion between units such as grams and cups.
+- Barcode lookup uses Open Food Facts only, needs a configured contact to run, works on Android and iOS but not on the web, and depends on community data that can be missing or wrong. UPC-E barcodes are not scanned. There is no text search of the online database.
+- Scanning, torch control, the per-request User-Agent header, and the rate-limit handling have been verified with automated tests only, not on devices.
 - AI estimates need the separate AI service to be deployed and the app to be built with its URL. The service has no user authentication: it is suitable for development, internal testing, or a single instance behind a protected gateway, not as a directly exposed public endpoint. Its rate limits and daily budget are kept in memory, reset on restart, and are not shared between instances.
 - AI portion and nutrition estimates, especially from photos, can be inaccurate. Unit changes during review are not converted. Local matching compares names only and does not understand synonyms.
 - On web, deleting a food keeps its ID in AI entry snapshots (as for library entries), and the AI service must list the web origin in `AI_ALLOWED_ORIGINS`. The camera option is not offered on web; photos are chosen from files.
