@@ -6,6 +6,7 @@ import { AppLoader } from '@/components/ui/AppLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { NoticeCard } from '@/components/ui/NoticeCard';
 import { TextButton } from '@/components/ui/TextButton';
+import { AccountEntryCard } from '@/features/account';
 import { GoalsOverview } from '@/features/nutrition-goals/components/GoalsOverview';
 import { ESTIMATE_DISCLAIMER } from '@/features/nutrition-goals/constants';
 import { useGoalsNavigation } from '@/features/nutrition-goals/hooks/useGoalsNavigation';
@@ -44,6 +45,7 @@ export function NutritionGoalsScreen() {
           </>
         ) : null}
         <RemindersEntryCard onPress={reminderNavigation.openReminders} />
+        <AccountEntryCard />
         <AppearanceSettings />
         <DataSourcesCard />
       </View>
