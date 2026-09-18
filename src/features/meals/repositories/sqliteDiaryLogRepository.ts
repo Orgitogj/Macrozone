@@ -215,20 +215,23 @@ function aiSourceValues(mealId: string, source: AiMealEntrySource, groupId: stri
   ];
 }
 
-export async function insertMealWithSource(transaction: SqlExecutor, meal: Meal, source: MealEntrySource | null): Promise<void> {
-  await transaction.runAsync(INSERT_MEAL_SQL, mealToRowValues(meal, null));
-  if (source === null) {
-    return;
-  }
+export async function insertMealEntrySource(transaction: SqlExecutor, mealId: string, source: MealEntrySource): Promise<void> {
   switch (source.sourceType) {
     case 'ai':
-      await transaction.runAsync(INSERT_AI_SOURCE_SQL, aiSourceValues(meal.id, source, meal.id));
+      await transaction.runAsync(INSERT_AI_SOURCE_SQL, aiSourceValues(mealId, source, mealId));
       break;
     case 'product':
-      await transaction.runAsync(INSERT_PRODUCT_SOURCE_SQL, productSourceValues(meal.id, source));
+      await transaction.runAsync(INSERT_PRODUCT_SOURCE_SQL, productSourceValues(mealId, source));
       break;
     default:
-      await transaction.runAsync(INSERT_SOURCE_SQL, librarySourceValues(meal.id, source));
+      await transaction.runAsync(INSERT_SOURCE_SQL, librarySourceValues(mealId, source));
+  }
+}
+
+export async function insertMealWithSource(transaction: SqlExecutor, meal: Meal, source: MealEntrySource | null): Promise<void> {
+  await transaction.runAsync(INSERT_MEAL_SQL, mealToRowValues(meal, null));
+  if (source !== null) {
+    await insertMealEntrySource(transaction, meal.id, source);
   }
 }
 
