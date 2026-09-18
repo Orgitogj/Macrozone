@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppLoader } from '@/components/ui/AppLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { AccountProvider, useAuthLinkHandler } from '@/features/account';
 import { OnboardingGateProvider, useOnboardingGate } from '@/features/onboarding';
 import { useReminderLifecycle } from '@/features/reminders';
 import { AppThemeProvider, layout, useTheme } from '@/theme';
@@ -11,6 +12,7 @@ function RootNavigator() {
   const { colors } = useTheme();
   const { state, retry } = useOnboardingGate();
   useReminderLifecycle(state.status === 'ready' && !state.needsOnboarding);
+  useAuthLinkHandler(state.status === 'ready');
 
   if (state.status !== 'ready') {
     return (
@@ -55,6 +57,17 @@ function RootNavigator() {
         <Stack.Screen name='ai-meal' options={{ ...detailScreenOptions, title: 'AI Estimate' }} />
         <Stack.Screen name='barcode' options={{ ...detailScreenOptions, title: 'Barcode' }} />
       </Stack.Protected>
+      <Stack.Screen name='auth/sign-in' options={{ ...detailScreenOptions, title: 'Sign In' }} />
+      <Stack.Screen name='auth/sign-up' options={{ ...detailScreenOptions, title: 'Create Account' }} />
+      <Stack.Screen name='auth/verify-email' options={{ ...detailScreenOptions, title: 'Confirm Your Email' }} />
+      <Stack.Screen name='auth/forgot-password' options={{ ...detailScreenOptions, title: 'Reset Password' }} />
+      <Stack.Screen name='auth/reset-password' options={{ ...detailScreenOptions, title: 'New Password' }} />
+      <Stack.Screen name='auth/callback' options={{ ...detailScreenOptions, title: 'Finishing Sign In' }} />
+      <Stack.Screen name='account/index' options={{ ...detailScreenOptions, title: 'Account & Sync' }} />
+      <Stack.Screen name='account/import' options={{ ...detailScreenOptions, title: 'Data On This Device' }} />
+      <Stack.Screen name='account/conflicts' options={{ ...detailScreenOptions, title: 'Needs Your Decision' }} />
+      <Stack.Screen name='account/conflict/[id]' options={{ ...detailScreenOptions, title: 'Choose A Version' }} />
+      <Stack.Screen name='account/delete' options={{ ...detailScreenOptions, title: 'Delete Account' }} />
     </Stack>
   );
 }
@@ -62,9 +75,11 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AppThemeProvider>
-      <OnboardingGateProvider>
-        <RootNavigator />
-      </OnboardingGateProvider>
+      <AccountProvider>
+        <OnboardingGateProvider>
+          <RootNavigator />
+        </OnboardingGateProvider>
+      </AccountProvider>
     </AppThemeProvider>
   );
 }
