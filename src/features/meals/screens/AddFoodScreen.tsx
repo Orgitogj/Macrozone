@@ -13,6 +13,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { SearchField } from '@/components/ui/SearchField';
 import { TextButton } from '@/components/ui/TextButton';
 import { AiEntryPanel } from '@/features/ai-meal/components/AiEntryPanel';
+import { BarcodeEntryPanel } from '@/features/barcode/components/BarcodeEntryPanel';
 import { FavoriteButton } from '@/features/library/components/FavoriteButton';
 import { LibraryRow } from '@/features/library/components/LibraryRow';
 import { LIBRARY_LIMITS } from '@/features/library/constants';
@@ -42,6 +43,7 @@ const MODE_LABELS: Readonly<Record<AddMode, string>> = {
   foods: 'Foods',
   savedMeals: 'Saved Meals',
   recipes: 'Recipes',
+  barcode: 'Barcode',
   ai: 'AI',
   manual: 'Manual',
 };
@@ -91,7 +93,7 @@ export function AddFoodScreen({ title, presetDate = null, presetMealType = null,
   const [search, setSearch] = useState('');
   const [favoriteMessage, setFavoriteMessage] = useState<string | null>(null);
   const [favoriteFlight] = useState(createSingleFlight);
-  const libraryMode: LibraryMode = mode === 'manual' || mode === 'ai' ? 'recent' : mode;
+  const libraryMode: LibraryMode = mode === 'manual' || mode === 'ai' || mode === 'barcode' ? 'recent' : mode;
   const hub = useAddHubRows(libraryMode, search);
 
   const modeChips = (
@@ -119,7 +121,7 @@ export function AddFoodScreen({ title, presetDate = null, presetMealType = null,
     );
   }
 
-  if (mode === 'ai') {
+  if (mode === 'ai' || mode === 'barcode') {
     return (
       <Screen edges={title ? ['top'] : ['bottom']}>
         <ScrollView
@@ -130,7 +132,11 @@ export function AddFoodScreen({ title, presetDate = null, presetMealType = null,
             {title ? <ScreenHeader title={title} subtitle='Log food to your diary' /> : null}
             <LogDestinationFields destination={destination} todayKey={todayKey} onChange={setDestination} />
             {modeChips}
-            <AiEntryPanel destination={destination} onLogManually={() => setMode('manual')} />
+            {mode === 'ai' ? (
+              <AiEntryPanel destination={destination} onLogManually={() => setMode('manual')} />
+            ) : (
+              <BarcodeEntryPanel destination={destination} onLogManually={() => setMode('manual')} />
+            )}
           </View>
         </ScrollView>
       </Screen>
