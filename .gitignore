@@ -41,6 +41,7 @@ server/.env*
 
 **/__tests__/
 src/testing/
+supabase/tests/
 
 # generated native folders
 /ios
