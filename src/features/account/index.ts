@@ -5,5 +5,6 @@ export { useAccountSession } from '@/features/account/hooks/useAccountSession';
 export { useAuthLinkHandler } from '@/features/account/hooks/useAuthLinkHandler';
 export { useSyncStatus } from '@/features/account/hooks/useSyncStatus';
 export { AccountScreen } from '@/features/account/screens/AccountScreen';
+export { ConflictDetailScreen } from '@/features/account/screens/ConflictDetailScreen';
 export { ConflictListScreen } from '@/features/account/screens/ConflictListScreen';
 export { GuestImportScreen } from '@/features/account/screens/GuestImportScreen';
