@@ -4,3 +4,4 @@ export { useAccountNavigation } from '@/features/account/hooks/useAccountNavigat
 export { useAccountSession } from '@/features/account/hooks/useAccountSession';
 export { useAuthLinkHandler } from '@/features/account/hooks/useAuthLinkHandler';
 export { useSyncStatus } from '@/features/account/hooks/useSyncStatus';
+export { AccountScreen } from '@/features/account/screens/AccountScreen';
