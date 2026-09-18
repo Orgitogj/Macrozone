@@ -191,6 +191,56 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       'CREATE INDEX idx_meal_entry_ai_sources_food ON meal_entry_ai_sources (matched_food_id)',
     ],
   },
+  {
+    version: 5,
+    name: 'create_barcode_product_tables',
+    statements: [
+      `CREATE TABLE online_product_cache (
+        provider TEXT NOT NULL CHECK (provider IN ('open_food_facts')),
+        barcode TEXT NOT NULL CHECK (length(barcode) BETWEEN 8 AND 14 AND barcode NOT GLOB '*[^0-9]*'),
+        status TEXT NOT NULL CHECK (status IN ('found', 'not_found')),
+        payload_version INTEGER NOT NULL CHECK (typeof(payload_version) = 'integer' AND payload_version >= 1),
+        payload_json TEXT CHECK (payload_json IS NULL OR json_valid(payload_json)),
+        fetched_at TEXT NOT NULL,
+        stale_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        provider_modified_at TEXT,
+        PRIMARY KEY (provider, barcode),
+        CHECK ((status = 'found' AND payload_json IS NOT NULL) OR (status = 'not_found' AND payload_json IS NULL)),
+        CHECK (stale_at <= expires_at)
+      )`,
+      'CREATE INDEX idx_online_product_cache_fetched ON online_product_cache (fetched_at, provider, barcode)',
+      'CREATE INDEX idx_online_product_cache_expires ON online_product_cache (expires_at)',
+      `CREATE TABLE food_barcodes (
+        barcode TEXT PRIMARY KEY NOT NULL CHECK (length(barcode) BETWEEN 8 AND 14 AND barcode NOT GLOB '*[^0-9]*'),
+        food_id TEXT NOT NULL REFERENCES foods (id) ON DELETE CASCADE,
+        linked_at TEXT NOT NULL
+      )`,
+      'CREATE INDEX idx_food_barcodes_food ON food_barcodes (food_id)',
+      `CREATE TABLE meal_entry_product_sources (
+        meal_id TEXT PRIMARY KEY NOT NULL REFERENCES meals (id) ON DELETE CASCADE,
+        provider TEXT NOT NULL CHECK (provider IN ('open_food_facts')),
+        barcode TEXT NOT NULL CHECK (length(barcode) BETWEEN 8 AND 14 AND barcode NOT GLOB '*[^0-9]*'),
+        provider_product_name TEXT CHECK (provider_product_name IS NULL OR length(provider_product_name) BETWEEN 1 AND 200),
+        item_name TEXT NOT NULL CHECK (length(item_name) BETWEEN 1 AND 80),
+        basis_amount REAL NOT NULL CHECK (typeof(basis_amount) IN ('integer', 'real') AND basis_amount > 0),
+        basis_unit TEXT NOT NULL CHECK (basis_unit IN ('g', 'ml', 'serving')),
+        base_calories REAL NOT NULL CHECK (typeof(base_calories) IN ('integer', 'real') AND base_calories >= 0),
+        base_protein REAL NOT NULL CHECK (typeof(base_protein) IN ('integer', 'real') AND base_protein >= 0),
+        base_carbs REAL NOT NULL CHECK (typeof(base_carbs) IN ('integer', 'real') AND base_carbs >= 0),
+        base_fat REAL NOT NULL CHECK (typeof(base_fat) IN ('integer', 'real') AND base_fat >= 0),
+        amount REAL NOT NULL CHECK (typeof(amount) IN ('integer', 'real') AND amount > 0),
+        user_reviewed INTEGER NOT NULL CHECK (user_reviewed IN (0, 1)),
+        looked_up_at TEXT NOT NULL,
+        provider_modified_at TEXT,
+        food_id TEXT REFERENCES foods (id) ON DELETE SET NULL,
+        log_group_id TEXT CHECK (log_group_id IS NULL OR length(log_group_id) > 0),
+        logged_at TEXT NOT NULL
+      )`,
+      'CREATE INDEX idx_meal_entry_product_sources_food ON meal_entry_product_sources (food_id)',
+      'CREATE INDEX idx_meal_entry_product_sources_barcode ON meal_entry_product_sources (barcode)',
+    ],
+  },
 ];
 
 export function assertMigrationsOrdered(migrations: readonly SchemaMigration[]): void {
