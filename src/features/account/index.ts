@@ -7,4 +7,5 @@ export { useSyncStatus } from '@/features/account/hooks/useSyncStatus';
 export { AccountScreen } from '@/features/account/screens/AccountScreen';
 export { ConflictDetailScreen } from '@/features/account/screens/ConflictDetailScreen';
 export { ConflictListScreen } from '@/features/account/screens/ConflictListScreen';
+export { DeleteAccountScreen } from '@/features/account/screens/DeleteAccountScreen';
 export { GuestImportScreen } from '@/features/account/screens/GuestImportScreen';
