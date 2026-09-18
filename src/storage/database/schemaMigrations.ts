@@ -1,3 +1,4 @@
+import { SYNC_SCHEMA_STATEMENTS } from '@/storage/database/syncSchema';
 import type { SqlDatabase, SqlExecutor } from '@/storage/database/types';
 
 export type SchemaMigration = {
@@ -240,6 +241,12 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       'CREATE INDEX idx_meal_entry_product_sources_food ON meal_entry_product_sources (food_id)',
       'CREATE INDEX idx_meal_entry_product_sources_barcode ON meal_entry_product_sources (barcode)',
     ],
+  },
+
+  {
+    version: 6,
+    name: 'create_account_sync_tables',
+    statements: SYNC_SCHEMA_STATEMENTS,
   },
 ];
 
