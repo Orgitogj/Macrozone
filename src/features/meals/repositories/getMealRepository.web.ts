@@ -1,8 +1,9 @@
+import { getScopedStorage } from '@/features/account/repositories/getScopedStorage';
 import { createAsyncStorageMealRepository } from '@/features/meals/repositories/asyncStorageMealRepository';
 import type { MealRepository } from '@/features/meals/repositories/mealRepository';
 import { localDataWriteQueue } from '@/storage/database/writeQueue';
 
-const repository = createAsyncStorageMealRepository({ queue: localDataWriteQueue });
+const repository = createAsyncStorageMealRepository({ storage: getScopedStorage(), queue: localDataWriteQueue });
 
 export function getMealRepository(): MealRepository {
   return repository;
