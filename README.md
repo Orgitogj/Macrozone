@@ -724,6 +724,114 @@ Screens and components never import `expo-notifications` or AsyncStorage. `getRe
 
 Tapping a valid reminder opens `/meal/new` with today's local date and the reminder's meal type. Payloads that are malformed, from an unknown version, or from other notifications are ignored. Each tap is handled once, including a tap that launched the app. Taps are processed only after onboarding is complete; a tap received during onboarding opens Add Meal once onboarding finishes in the same session.
 
+## Accounts, cloud backup, and sync
+
+An account is optional. Everything in MacroZone works without one, and the app never waits for the cloud to show or save your data.
+
+### What an account changes, and what it does not
+
+- **Local first, always.** Screens read and write the local database (SQLite on Android and iOS, browser storage on web). Sync runs behind them: it sends what changed and applies what came back. A failed or slow network never blocks logging a meal.
+- **Two scopes.** Guest data lives in `macrozone.db`. Each account gets its own database file, `macrozone-account-<key>.db`, where `<key>` is the first 32 hex characters of the SHA-256 of the user id. The raw user id is never used as a file name, a storage key, or a log value. On web the same split is done with a key prefix, `macrozone.account.<key>.`.
+- **Nothing is mixed.** The active scope is set before any repository opens a database, and every database handle is guarded: if the account changes while a read or write is in flight, the operation fails with a scope-changed error instead of touching the wrong account. Signing in or out remounts the screens so no data from the previous scope stays on screen.
+- **Restoration comes first.** On launch, MacroZone restores the saved session and activates the right database before the rest of the app renders. An account database is never exposed before that finishes.
+
+### Sign in, sign up, and links
+
+- Supabase Auth with the PKCE flow. Email and password only; no third-party sign-in yet.
+- Sign-up sends a confirmation email. Until the address is confirmed, the app keeps working and the account screen says the address is not confirmed yet.
+- Errors are mapped to a small set of stable codes with plain-language messages. Sign-up and password reset never reveal whether an address is registered.
+- Emailed links open only two routes, `auth/callback` and `auth/reset-password`, and only from this app's own scheme (`macrozone://`) or its web origin. Links from other origins are ignored, a `next` parameter is accepted only for a short list of in-app destinations, and a reset link can only open the reset screen. Expired or already-used links show a recovery screen that offers a new link instead of a dead end.
+
+### Session storage on the device
+
+- On Android and iOS the session is stored in `expo-secure-store`. Because SecureStore limits a value's size, the session is split into numbered chunks with a manifest written last, so an interrupted write can never produce a half-new, half-old session: until the manifest is replaced, the previous session is still the valid one. Each chunk carries a checksum and a length, and a missing, reordered, or corrupted chunk fails closed (no session) rather than returning half a token. Signing out removes every chunk, and a failed cleanup can never resurrect an old session. Writes are serialized, and no token or chunk content is ever logged.
+- On web the session uses browser storage, which is the platform's own mechanism; treat a shared browser profile as a shared session.
+
+### Configuration
+
+| Variable | Purpose |
+| -------- | ------- |
+| `EXPO_PUBLIC_SUPABASE_URL` | Your Supabase project URL. HTTPS only; placeholder hosts are rejected. |
+| `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | The project's publishable (anon) key. MacroZone refuses any value that looks like a secret or service-role key. |
+
+Both are public build-time values, like every `EXPO_PUBLIC_*` variable. **No service-role key, database password, JWT signing secret, or management token belongs in the app**, and none is used by it. `.env.example` lists the variables with empty placeholders; real values go in your untracked `.env.local` or your build service. When either variable is missing or invalid, the app runs in local-only mode and the account screens say so.
+
+The exact server-side setup is in [Deploying accounts and sync](#deploying-accounts-and-sync). This repository has never connected to a Supabase project.
+
+### The sync protocol
+
+- **Aggregates, not rows.** Sync works on five aggregates: a meal (with its one source snapshot), a food (with its barcode links), a saved meal (with its items), a recipe (with its ingredients), and the single nutrition plan. Each is encoded as a versioned JSON payload (`payload_version` 1) and hashed canonically, so identical content is recognized regardless of key order.
+- **Durable outbox.** SQLite triggers inside the same transaction as your edit insert or coalesce one pending outbox row per entity. Triggers are active only in an account database and only when a remote page is not being applied, so pulling never echoes back as a new local change.
+- **Seal, send, acknowledge.** A push run seals a batch of pending rows (so later edits start a new pending row), sends them with their stable operation ids and base revisions, and applies the result: applied rows advance the stored revision, conflicts open a conflict record, and rejected rows are blocked instead of retried forever. A retry with the same operation id is recognized by the cloud and cannot apply twice.
+- **Incremental pull.** Each account has a monotonic change sequence. The device pulls pages after its cursor and commits the cursor only after a page has been stored, so an interrupted pull is simply repeated. Deletions arrive as tombstones.
+- **Automatic merge only when safe.** A cloud change that matches the local content (ignoring `updatedAt`) is applied silently. Anything else becomes a conflict for you to resolve.
+- **One run at a time.** A single-flight coordinator runs push and pull in rounds and cancels the active run when the account changes or you sign out. Failures back off exponentially with jitter (5 seconds up to 15 minutes). Syncing is triggered when the app becomes active, when connectivity returns, a few seconds after a local change, after sign-in or an import, and when you tap Sync Now — never by polling.
+- **Status wording is strict.** "Up to date" appears only when nothing is waiting, no conflict is open, the cursor is committed, and the session is valid. Otherwise the card names the reason: changes waiting, syncing, offline, attention required, or sign in again. A failed background sync never hides your data; it shows a warning alongside it.
+
+### Conflicts
+
+- A conflict is shown as two readable versions, not raw JSON: the entity type, a recognizable name, and the fields that matter (for a meal, its meal type, date, time, calories, and macros). Deletions are shown as deletions, and timestamps are supporting information only.
+- You choose Keep Mine, Use Cloud, or Duplicate as New, and each option states its effect before you commit. Duplicate is offered only when it is valid — never for the single nutrition plan, and never without a local version to copy.
+- Resolving is single-flight, writes exactly one new outbox operation for the entity it is about, and changes nothing else. A payload this version of the app cannot read is never applied: "Use Cloud" is disabled with an explanation, and the conflict stays open until the app is updated.
+
+### Data logged before you signed in
+
+- Account & sync shows exactly how many meals, foods, saved meals, recipes, and goals were logged on this device before signing in, and offers three choices: **Copy and Back Up in My Account**, **Keep Guest Data Separate**, or **Decide Later**. The decision is remembered per dataset. The screen states that a copy is added to the signed-in account, that the original data stays on this device, that retrying does not create duplicates, and that cloud conflicts may need review.
+- Importing copies; it never deletes the guest copy. Items are copied in dependency order (foods, saved meals, recipes, meals, plan) so references stay intact, an identical food already in the account is matched instead of duplicated, and each item is copied in its own transaction. Running it again after an interruption continues where it stopped and cannot create duplicates. Progress is shown per aggregate type, and repeated taps cannot start a second import.
+- Imported data is pushed to the cloud like any other change, so it can produce conflicts if your account already holds different versions.
+
+### Cloud schema and access rules
+
+`supabase/migrations/20260917000000_macrozone_account_sync.sql` creates:
+
+- `public.sync_accounts` (one row per user, holding the change sequence), `public.sync_entities` (current state per entity, with its revision and tombstone flag), and `public.sync_operations` (applied operation ids for replay detection).
+- Row-level security **enabled and forced** on all three, with select-only policies restricted to `auth.uid()`, and direct insert, update, and delete privileges revoked. Clients cannot write to the tables at all.
+- Two client-callable `security definer` functions with `set search_path = ''`, which are the only write paths for sync: `sync_push` (validates payloads, serializes per user with a row lock, checks base revisions, records operation ids, returns applied/conflict/rejected per operation) and `sync_pull` (returns changes after a cursor for the calling user only). Neither accepts a user id from the client; both use `auth.uid()`.
+
+`supabase/migrations/20260918000000_protected_account_deletion.sql` then removes the earlier client-callable `public.delete_my_account()` and creates `public.delete_account_data(p_user_id uuid)`: `security definer`, `set search_path = ''`, every object schema-qualified, deleting only that user's `sync_*` rows and that one `auth.users` row, and returning `already_deleted` when repeated. `EXECUTE` is revoked from `PUBLIC`, `anon`, and `authenticated` and granted only to `service_role`, so no app session can call it — only the Edge Function described next.
+
+### Recent authentication for account deletion
+
+The password field in the app is not a security boundary: a modified client could skip it. The server therefore proves recent authentication on its own:
+
+- **What is not trusted:** a password check done by the app, the token's `iat`, the time of the last token refresh, any UI state, and any flag or user id in the request body. A refreshed access token is recent without the user having typed anything.
+- **Why SQL alone is not used:** PostgreSQL only sees the verified JWT claims. The `amr` claim carries sign-in timestamps, but whether a refresh preserves or renews them is Supabase implementation behavior rather than a documented contract, and not every project configuration includes it. MacroZone does not rely on it.
+- **The trusted path:** the app sends its access token and the password to the `delete-account` Edge Function over HTTPS. The function (1) asks GoTrue who the token belongs to (`GET /auth/v1/user`), (2) takes the email from that verified answer and asks GoTrue to check the password right now (`POST /auth/v1/token?grant_type=password`), (3) refuses unless both answers name the same user, (4) calls `public.delete_account_data` with the **service_role key that exists only in the function's server environment**, passing the user id from step 1, and (5) signs out the short-lived session created by the password check. A user id, email, or flag in the request body is ignored.
+- **Failure behavior:** a missing or invalid token, a missing, wrong, or rate-limited password, or a mismatched identity returns an error and deletes nothing. Logs record only the event and its outcome — never passwords, tokens, emails, or user ids.
+
+### Deploying accounts and sync
+
+Do this first in a disposable, non-production Supabase project.
+
+1. **Create the project** and note its URL and publishable (anon) key. Nothing else from the dashboard goes into the app.
+2. **Apply the migrations in order** with the Supabase CLI (`supabase link`, then `supabase db push`): `20260917000000_macrozone_account_sync.sql`, then `20260918000000_protected_account_deletion.sql`. The CLI runs them as the `postgres` role, which therefore owns every function they create.
+3. **Check ownership and grants** in the SQL editor:
+   ```sql
+   select p.proname, pg_get_userbyid(p.proowner) as owner, p.prosecdef, p.proconfig
+   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname in ('sync_push', 'sync_pull', 'delete_account_data');
+
+   select has_function_privilege('anon', 'public.delete_account_data(uuid)', 'execute'),          -- false
+          has_function_privilege('authenticated', 'public.delete_account_data(uuid)', 'execute'), -- false
+          has_function_privilege('service_role', 'public.delete_account_data(uuid)', 'execute');  -- true
+   ```
+   Expect owner `postgres`, `prosecdef = true`, and `search_path=""` for all three, and `public.delete_my_account` to no longer exist.
+4. **Deploy the Edge Function** with `supabase functions deploy delete-account`. Keep JWT verification on (the default). The function reads `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`, which Supabase injects into every function's server environment; do not add them to the app, `app.json`, `.env*`, or any `EXPO_PUBLIC_*` variable.
+5. **Configure Auth** under Authentication: enable email confirmation; set the minimum password length to at least 8 (MacroZone's own minimum) and enable leaked-password protection if your plan offers it; keep the default rate limits for sign-in and password grants.
+6. **Add redirect URLs** under Authentication → URL Configuration: `macrozone://auth/callback` and `macrozone://auth/reset-password` for builds, the matching `exp://…/--/auth/callback` and `exp://…/--/auth/reset-password` forms if you test in Expo Go, and `https://<your web origin>/auth/callback` and `https://<your web origin>/auth/reset-password` for the web build. Set the Site URL to your web origin.
+7. **Build the app** with only `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` set (in `.env.local` or the build service).
+8. **Verify manually in the disposable project** before production: sign up, confirm the email, sign in on two devices, edit the same meal offline on both and resolve the conflict, sign out and back in, request and use a password reset link, reuse an expired link, back up guest data, then delete an account with each deletion choice. Also confirm that calling `rpc('delete_account_data', …)` with a signed-in user's token is refused, that the function refuses a wrong password, and that the function logs contain no emails, tokens, or passwords. Only then repeat steps 1–7 for production.
+
+### Signing out and deleting an account
+
+- **Sign out** stops new syncs, cancels the active one, keeps unsent changes in the outbox, closes the account database, clears the session, switches back to the guest database, and reloads the screens. It deletes nothing. If part of it fails, the app says which part.
+- **Delete account** explains what is deleted and offers two explicit choices plus Cancel:
+  1. **Copy my data to this device, then delete my account.** Syncing stops, MacroZone reads a consistent snapshot of the account database in one transaction, and copies it into the guest (on-device) data in dependency order (foods, saved meals, recipes, meals, goals). It reuses the guest-import rules: immutable meal snapshots are kept as they are, existing guest records are never overwritten, an identical food is matched instead of duplicated, a different item with the same id is saved as a separate copy, and different nutrition goals keep the guest version. Each item is written in its own transaction together with a progress record keyed by the account, so an interrupted copy resumes and a completed copy is never repeated. Every copied item is read back before the cloud account is touched; if the copy or that check fails, nothing is deleted and the screen says why.
+  2. **Delete my account and remove this device's account data.** Nothing is copied.
+
+  In both cases MacroZone then asks the `delete-account` function to delete the cloud account (password re-checked on the server), signs out, switches to guest data, and only after that removes the account database file. That file is locked to the deleted account and could never be opened again, so it is not presented as a kept copy. If the copy succeeded but the cloud deletion failed, the copied data stays in guest mode, the account stays signed in, and trying again deletes the account without copying a second time. Repeated taps join the deletion already running. The guest database is never deleted, and partial failures are reported rather than shown as success.
+- **Web:** the same choices exist. The copy runs through a serial queue, writes the guest keys in one `multiSet`, restores the previous guest values if the write fails (and says so if the restore also fails), and reads the written values back before deleting anything. A browser crash in the middle of the write, or another tab writing at the same time, can still leave a partial state, because browser storage has no cross-key or cross-tab transaction.
+
 ## Nutrition goal calculations
 
 Targets are estimates from general population formulas. They are not medical advice. The calculator is limited to adults (18–100 years).
