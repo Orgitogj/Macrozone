@@ -45,8 +45,16 @@
         "expo-image-picker",
         {
           "photosPermission": "MacroZone uses the photo you choose to estimate the nutrition of a meal. The photo is only sent when you tap Analyze.",
-          "cameraPermission": "MacroZone uses the camera to take a photo of your meal for a nutrition estimate.",
+          "cameraPermission": "MacroZone uses the camera to take meal photos for nutrition estimates and to scan food barcodes.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "MacroZone uses the camera to take meal photos for nutrition estimates and to scan food barcodes.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ]
     ],
