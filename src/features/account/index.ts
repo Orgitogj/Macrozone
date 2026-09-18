@@ -1,3 +1,4 @@
+export { AccountEntryCard } from '@/features/account/components/AccountEntryCard';
 export { AccountProvider } from '@/features/account/components/AccountProvider';
 export { SyncStatusCard } from '@/features/account/components/SyncStatusCard';
 export { useAccountNavigation } from '@/features/account/hooks/useAccountNavigation';
