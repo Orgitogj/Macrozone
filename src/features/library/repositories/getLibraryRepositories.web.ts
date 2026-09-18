@@ -7,8 +7,9 @@ import type {
   RecipeRepository,
   SavedMealRepository,
 } from '@/features/library/repositories/libraryRepositories';
+import { localDataWriteQueue } from '@/storage/database/writeQueue';
 
-const repositories = createAsyncStorageLibraryRepositories(createAsyncStorageLibraryStore());
+const repositories = createAsyncStorageLibraryRepositories(createAsyncStorageLibraryStore({ queue: localDataWriteQueue }));
 
 export function getLibraryRepositories(): {
   foods: FoodRepository;

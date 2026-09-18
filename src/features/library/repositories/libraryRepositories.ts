@@ -46,6 +46,7 @@ export type FoodRepository = {
   listFoods(query: FoodListQuery): Promise<Food[]>;
   getFood(id: string): Promise<Food | null>;
   getFoodsByIds(ids: readonly string[]): Promise<Food[]>;
+  findExactFood(input: FoodInput): Promise<Food | null>;
   createFood(input: FoodInput): Promise<Food>;
   updateFood(id: string, input: FoodInput): Promise<Food>;
   setFavorite(id: string, favorite: boolean): Promise<Food>;

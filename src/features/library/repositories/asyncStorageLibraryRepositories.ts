@@ -203,6 +203,9 @@ export function createAsyncStorageLibraryRepositories(
       return (await store.read()).foods.filter((food) => wanted.has(food.id));
     },
 
+    findExactFood: async (input) =>
+      isValidFoodInput(input) ? ((await store.read()).foods.find((food) => isSameFoodDefinition(food, input)) ?? null) : null,
+
     createFood: (input) => {
       if (!isValidFoodInput(input)) {
         return Promise.reject(invalid());

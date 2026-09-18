@@ -54,12 +54,12 @@ function rowsToFoods(rows: readonly FoodRow[]): Food[] {
   });
 }
 
-async function selectFood(executor: SqlExecutor, id: string): Promise<Food | null> {
+export async function selectFood(executor: SqlExecutor, id: string): Promise<Food | null> {
   const row = await executor.getFirstAsync<FoodRow>(`SELECT ${FOOD_COLUMNS} FROM foods WHERE id = ?`, [id]);
   return row ? rowToFood(row) : null;
 }
 
-async function assertNoDuplicate(executor: SqlExecutor, input: FoodInput, exceptId: string | null): Promise<void> {
+export async function findDuplicateId(executor: SqlExecutor, input: FoodInput, exceptId: string | null): Promise<string | null> {
   const row = await executor.getFirstAsync<{ id: string }>(
     `SELECT id FROM foods
      WHERE name_key = ? AND serving_unit = ? AND serving_amount = ? AND calories = ? AND protein = ? AND carbs = ? AND fat = ?
@@ -77,9 +77,54 @@ async function assertNoDuplicate(executor: SqlExecutor, input: FoodInput, except
       exceptId,
     ],
   );
-  if (row) {
+  return row?.id ?? null;
+}
+
+async function assertNoDuplicate(executor: SqlExecutor, input: FoodInput, exceptId: string | null): Promise<void> {
+  if ((await findDuplicateId(executor, input, exceptId)) !== null) {
     throw new LibraryRepositoryError('duplicate', LIBRARY_MESSAGES.duplicateFood);
   }
+}
+
+export async function insertFoodRow(executor: SqlExecutor, id: string, input: FoodInput, timestamp: string): Promise<Food> {
+  await executor.runAsync(
+    `INSERT INTO foods (id, name, name_key, serving_amount, serving_unit, calories, protein, carbs, fat, is_favorite, favorited_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)`,
+    [
+      id,
+      input.name,
+      toNameKey(input.name),
+      input.serving.amount,
+      input.serving.unit,
+      input.nutrition.calories,
+      input.nutrition.protein,
+      input.nutrition.carbs,
+      input.nutrition.fat,
+      timestamp,
+      timestamp,
+    ],
+  );
+  return { ...input, id, isFavorite: false, favoritedAt: null, createdAt: timestamp, updatedAt: timestamp };
+}
+
+export async function updateFoodRow(executor: SqlExecutor, current: Food, input: FoodInput, timestamp: string): Promise<Food> {
+  await executor.runAsync(
+    `UPDATE foods SET name = ?, name_key = ?, serving_amount = ?, serving_unit = ?, calories = ?, protein = ?, carbs = ?, fat = ?, updated_at = ?
+     WHERE id = ?`,
+    [
+      input.name,
+      toNameKey(input.name),
+      input.serving.amount,
+      input.serving.unit,
+      input.nutrition.calories,
+      input.nutrition.protein,
+      input.nutrition.carbs,
+      input.nutrition.fat,
+      timestamp,
+      current.id,
+    ],
+  );
+  return { ...current, ...input, updatedAt: timestamp };
 }
 
 function assertValidInput(input: FoodInput): void {
@@ -120,6 +165,15 @@ export function createSqliteFoodRepository(
 
     getFood: (id) => read((database) => selectFood(database, id)),
 
+    findExactFood: (input) =>
+      read(async (database) => {
+        if (!isValidFoodInput(input)) {
+          return null;
+        }
+        const id = await findDuplicateId(database, input, null);
+        return id === null ? null : selectFood(database, id);
+      }),
+
     getFoodsByIds: (ids) =>
       read(async (database) => {
         const unique = [...new Set(ids)];
@@ -144,34 +198,15 @@ export function createSqliteFoodRepository(
       }
       return write(async (database) => {
         const timestamp = now().toISOString();
+        let created: Food | null = null;
         await database.withExclusiveTransactionAsync(async (transaction) => {
           await assertNoDuplicate(transaction, input, null);
-          await transaction.runAsync(
-            `INSERT INTO foods (id, name, name_key, serving_amount, serving_unit, calories, protein, carbs, fat, is_favorite, favorited_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)`,
-            [
-              id,
-              input.name,
-              toNameKey(input.name),
-              input.serving.amount,
-              input.serving.unit,
-              input.nutrition.calories,
-              input.nutrition.protein,
-              input.nutrition.carbs,
-              input.nutrition.fat,
-              timestamp,
-              timestamp,
-            ],
-          );
+          created = await insertFoodRow(transaction, id, input, timestamp);
         });
-        return {
-          ...input,
-          id,
-          isFavorite: false,
-          favoritedAt: null,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
+        if (created === null) {
+          throw notFoundError();
+        }
+        return created;
       });
     },
 
@@ -189,24 +224,7 @@ export function createSqliteFoodRepository(
             throw notFoundError();
           }
           await assertNoDuplicate(transaction, input, id);
-          const timestamp = now().toISOString();
-          await transaction.runAsync(
-            `UPDATE foods SET name = ?, name_key = ?, serving_amount = ?, serving_unit = ?, calories = ?, protein = ?, carbs = ?, fat = ?, updated_at = ?
-             WHERE id = ?`,
-            [
-              input.name,
-              toNameKey(input.name),
-              input.serving.amount,
-              input.serving.unit,
-              input.nutrition.calories,
-              input.nutrition.protein,
-              input.nutrition.carbs,
-              input.nutrition.fat,
-              timestamp,
-              id,
-            ],
-          );
-          updated = { ...current, ...input, updatedAt: timestamp };
+          updated = await updateFoodRow(transaction, current, input, now().toISOString());
         });
         if (updated === null) {
           throw notFoundError();
@@ -251,6 +269,8 @@ export function createSqliteFoodRepository(
           await transaction.runAsync('UPDATE recipe_ingredients SET food_id = NULL WHERE food_id = ?', [id]);
           await transaction.runAsync('UPDATE meal_entry_sources SET food_id = NULL WHERE food_id = ?', [id]);
           await transaction.runAsync('UPDATE meal_entry_ai_sources SET matched_food_id = NULL WHERE matched_food_id = ?', [id]);
+          await transaction.runAsync('UPDATE meal_entry_product_sources SET food_id = NULL WHERE food_id = ?', [id]);
+          await transaction.runAsync('DELETE FROM food_barcodes WHERE food_id = ?', [id]);
           await transaction.runAsync('DELETE FROM foods WHERE id = ?', [id]);
         });
       }),
