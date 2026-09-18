@@ -10,12 +10,13 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "typecheck:server": "tsc -p server/tsconfig.json",
+    "typecheck:functions": "tsc -p supabase/functions/tsconfig.json",
     "server:install": "npm --prefix server ci",
     "server:start": "npm --prefix server start",
     "doctor": "npx expo-doctor",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
-    "check": "npm run lint && npm run typecheck && npm run typecheck:server && npm test"
+    "check": "npm run lint && npm run typecheck && npm run typecheck:server && npm run typecheck:functions && npm test"
   },
   "jest": {
     "preset": "jest-expo",
