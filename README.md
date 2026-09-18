@@ -6,7 +6,7 @@ MacroZone is a mobile meal and macronutrient tracker built with Expo and React N
 Select a date → log food → view daily macros → track progress
 ```
 
-The app is currently an early MVP. All data stays on the device, except a meal description or photo that you explicitly send for an AI estimate (see [AI meal estimates](#ai-meal-estimates)).
+The app is currently an early MVP. All data stays on the device, except a meal description or photo that you explicitly send for an AI estimate (see [AI meal estimates](#ai-meal-estimates)), a barcode you look up, and — only if you create an account — the data you choose to back up (see [Accounts, cloud backup, and sync](#accounts-cloud-backup-and-sync)). MacroZone stays fully usable without an account.
 
 ## Current features
 
@@ -56,6 +56,13 @@ The app is currently an early MVP. All data stays on the device, except a meal d
   - MacroZone asks for notification permission only when you turn on a reminder. If notifications are blocked, the reminder stays off and the screen explains how to allow notifications in system settings.
   - Tapping a reminder opens Add Meal for today with that meal type selected, whether the app was open, in the background, or closed.
   - On web, the screen explains that reminders are available in the Android and iOS apps.
+- **Accounts and cloud backup (optional):** open Account & sync from the Nutrition Goals screen. Without an account MacroZone says "Using MacroZone locally" and everything keeps working offline on this device.
+  - Create an account or sign in with an email address and password, confirm the address from the emailed link, and reset a forgotten password from a link that only opens the reset screen.
+  - When you are signed in, the screen shows your email address, whether it is confirmed, the backup status, the last successful sync, how many changes are waiting, how many need a decision, whether you are offline, and buttons for Sync Now, Manage Conflicts, Sign Out, and Delete Account. Access tokens and internal identifiers are never shown.
+  - Data logged before signing in stays on the device. From Account & sync you can back it up into the account, keep it separate, or decide later; the on-device copy is never deleted by that choice.
+  - Editing the same item on two devices is never resolved silently: MacroZone shows both versions in plain language and you choose Keep Mine, Use Cloud, or Duplicate as New.
+  - Signing out stops syncing, keeps changes that have not been sent, and returns to the data stored on this device. Deleting an account offers two explicit choices — copy your data into on-device (guest) mode first, or remove this device's account data — asks for your password and a typed confirmation, and never deletes the cloud account unless a chosen copy has completed and been verified.
+  - When the app is built without Supabase settings, the account screens explain that cloud backup is not set up and everything else keeps working.
 
 ## Technology stack
 
@@ -89,6 +96,8 @@ npm start
 
 In the Expo CLI, press `a` for Android, `i` for iOS, or `w` for web, or scan the QR code with Expo Go.
 
+Optional features are configured with environment variables. Copy `.env.example` to `.env.local` (git-ignored) and fill in only what you need: the AI endpoint URL, the Open Food Facts contact, and the Supabase URL and publishable key for accounts and cloud backup. Every `EXPO_PUBLIC_*` value is compiled into the app bundle and readable by anyone with the app, so no secret belongs there. Without these variables, MacroZone runs with AI, barcode lookup, and cloud backup switched off, and says so where they would appear.
+
 > Note: Expo Go on Android does not support remote push notifications on SDK 53+. MacroZone only schedules local notifications, which Expo Go still supports, but notification channels, permissions, and tap handling are most reliable to verify in a [development build](https://docs.expo.dev/develop/development-builds/introduction/).
 
 ## Available commands
@@ -102,6 +111,7 @@ In the Expo CLI, press `a` for Android, `i` for iOS, or `w` for web, or scan the
 | `npm run lint`      | Run ESLint through `expo lint`                           |
 | `npm run typecheck` | Run the TypeScript compiler without emitting files       |
 | `npm run typecheck:server` | Type-check the AI service in `server/` (run `npm run server:install` first) |
+| `npm run typecheck:functions` | Type-check the Supabase Edge Function in `supabase/functions/` |
 | `npm run server:install` | Install the AI service dependencies from its lockfile |
 | `npm run server:start` | Start the AI service (requires the environment variables below) |
 | `npm test`          | Run unit tests once                                      |
@@ -127,6 +137,10 @@ src/
     recipe/                   routes carry the diary destination (?date=&mealType=)
     onboarding.tsx            First-run goal setup (shown only while the onboarding gate requires it)
     goals/                    Nutrition Goals overview, calculator (calculate.tsx), manual editor (edit.tsx)
+    auth/                     sign-in.tsx, sign-up.tsx, verify-email.tsx, forgot-password.tsx,
+                              reset-password.tsx, callback.tsx (opened by the emailed links)
+    account/                  index.tsx (Account & sync), import.tsx (data on this device), conflicts.tsx,
+                              conflict/[id].tsx, delete.tsx
   features/
     meals/
       components/             Presentational meal UI (form, calorie and macro cards, meal-type sections,
@@ -174,7 +188,36 @@ src/
                               interfaces, expo-notifications adapter, getReminderPlatform(.web).ts
       utils/                  Pure logic: settings model and parsing, notification payloads, permission mapping,
                               reconciliation planning, tap-to-route mapping, status text
-    settings/                 Appearance (theme) settings
+    settings/                 Appearance (theme) settings and the data-sources card
+    auth/
+      adapters/               Supabase client (PKCE, no session detection in URLs) and the chunked SecureStore
+                              session storage; getSupabaseClient(.web).ts
+      components/             Email and password fields
+      config/                 Supabase configuration resolution (https only, publishable keys only)
+      repositories/           AuthRepository interface, the Supabase adapter with stable error codes, and a
+                              not-configured adapter
+      screens/                Sign in, create account, confirm email, forgot password, new password, finishing sign in
+      services/               authService (validation, sign up/in/out, reset, resend, deep-link exchange)
+      utils/                  Deep-link parsing (allowed origins, allowed routes only)
+      validation/             Email and password validation
+    account/
+      components/             AccountProvider (restores the session before any account data is read),
+                              Account & sync entry card, sync status card and badge, conflict version card
+      hooks/                  useAccountSession, useSyncStatus, useConflicts, useGuestImport, useAuthLinkHandler,
+                              useAccountNavigation
+      repositories/           Per-account database manager (open, claim, guard, delete), scoped key-value storage
+                              for web, guest database opener, getAccountDatabaseManager(.web).ts
+      screens/                Account & sync, data on this device, conflicts, choose a version, delete account
+      services/               Account scope store, account session service (restore, switch, sign out),
+                              account services wiring, guest import (SQLite and web)
+      utils/                  Account key derivation, guest counts, conflict presentation
+    sync/
+      adapters/               Connectivity provider (expo-network on native, browser events on web)
+      repositories/           Aggregate reads/writes, the local outbox store (SQLite and web), and the
+                              Supabase cloud transport
+      services/               Sync coordinator (single-flight push/pull with backoff and cancellation) and
+                              triggers (app active, connectivity regained, debounced local change)
+      utils/                  Canonical payloads and hashing, aggregate encode/decode, duplication, status wording
     barcode/
       adapters/               Camera permission and external link adapter
       components/             Scanner panel, manual barcode form, product review form, lookup notices,
@@ -215,13 +258,16 @@ src/
                               loading/empty/error states
   hooks/                      Cross-feature hooks: useSelectedDate, useTodayDateKey, useDebouncedValue
   storage/database/           SQLite access: SqlDatabase interface, connection setup (foreign keys, serialized
-                              transactions), open/prepare, ordered schema migrations, shared write queue
+                              transactions), open/prepare, ordered schema migrations, shared write queue,
+                              sync schema and outbox triggers (syncSchema.ts)
   types/nutrition.ts          Shared nutrition types (MacroTotals)
   utils/                      Pure shared utilities: dates, times, date/time input conversion, number input, formatting, ids,
                               single-flight guard, serial queue, checksum, route params, async loading state,
                               device time zone, confirmation dialog
 jest.environment.js           Jest environment: pins/switches timezones, provides in-memory SQLite for tests
 assets/images/                App icon, adaptive icons, splash image, favicon
+supabase/migrations/          Cloud SQL for accounts and sync, and the protected account-deletion function
+supabase/functions/          delete-account Edge Function (handler.ts is plain TypeScript; index.ts is the Deno entry)
 server/                       AI meal analysis service (never bundled into the app)
   src/main.ts                 Startup: configuration, provider, rate limiter, HTTP server, shutdown
   src/config.ts               Environment validation (fails fast, logs variable names only)
