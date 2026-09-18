@@ -11,6 +11,7 @@ import type {
   Meal,
   MealEntrySource,
   NewDiaryEntry,
+  ProductMealEntrySource,
   RecentFoodUsage,
 } from '@/features/meals/types';
 import { createMeal } from '@/features/meals/utils/mealRecords';
@@ -49,6 +50,36 @@ type AiSourceRow = {
   log_group_id: string;
   logged_at: string;
 };
+
+type ProductSourceRow = {
+  meal_id: string;
+  provider: string;
+  barcode: string;
+  provider_product_name: string | null;
+  item_name: string;
+  basis_amount: number;
+  basis_unit: string;
+  base_calories: number;
+  base_protein: number;
+  base_carbs: number;
+  base_fat: number;
+  amount: number;
+  user_reviewed: number;
+  looked_up_at: string;
+  provider_modified_at: string | null;
+  food_id: string | null;
+  log_group_id: string | null;
+  logged_at: string;
+};
+
+const PRODUCT_SOURCE_COLUMNS =
+  'meal_id, provider, barcode, provider_product_name, item_name, basis_amount, basis_unit, base_calories, base_protein, base_carbs, base_fat, amount, user_reviewed, looked_up_at, provider_modified_at, food_id, log_group_id, logged_at';
+
+const INSERT_PRODUCT_SOURCE_SQL = `INSERT INTO meal_entry_product_sources (${PRODUCT_SOURCE_COLUMNS}) VALUES (
+  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+  (SELECT id FROM foods WHERE id = ?),
+  ?, ?
+)`;
 
 const SOURCE_COLUMNS =
   'meal_id, source_type, food_id, recipe_id, saved_meal_id, log_group_id, source_name, serving_amount, serving_unit, base_calories, base_protein, base_carbs, base_fat, amount, logged_at';
@@ -103,6 +134,53 @@ export function rowToAiEntrySource(row: AiSourceRow): MealEntrySource | null {
   });
 }
 
+export function rowToProductEntrySource(row: ProductSourceRow): MealEntrySource | null {
+  return parseStoredMealEntrySource({
+    sourceType: 'product',
+    provider: row.provider,
+    barcode: row.barcode,
+    providerProductName: row.provider_product_name,
+    itemName: row.item_name,
+    serving: { amount: row.basis_amount, unit: row.basis_unit },
+    baseNutrition: {
+      calories: row.base_calories,
+      protein: row.base_protein,
+      carbs: row.base_carbs,
+      fat: row.base_fat,
+    },
+    amount: row.amount,
+    userReviewed: row.user_reviewed === 1,
+    lookedUpAt: row.looked_up_at,
+    providerModifiedAt: row.provider_modified_at,
+    foodId: row.food_id,
+    logGroupId: row.log_group_id,
+    loggedAt: row.logged_at,
+  });
+}
+
+function productSourceValues(mealId: string, source: ProductMealEntrySource): SqlValue[] {
+  return [
+    mealId,
+    source.provider,
+    source.barcode,
+    source.providerProductName,
+    source.itemName,
+    source.serving.amount,
+    source.serving.unit,
+    source.baseNutrition.calories,
+    source.baseNutrition.protein,
+    source.baseNutrition.carbs,
+    source.baseNutrition.fat,
+    source.amount,
+    source.userReviewed ? 1 : 0,
+    source.lookedUpAt,
+    source.providerModifiedAt,
+    source.foodId,
+    source.logGroupId,
+    source.loggedAt,
+  ];
+}
+
 function librarySourceValues(mealId: string, source: LibraryMealEntrySource): SqlValue[] {
   return [
     mealId,
@@ -146,6 +224,9 @@ export async function insertMealWithSource(transaction: SqlExecutor, meal: Meal,
     case 'ai':
       await transaction.runAsync(INSERT_AI_SOURCE_SQL, aiSourceValues(meal.id, source, meal.id));
       break;
+    case 'product':
+      await transaction.runAsync(INSERT_PRODUCT_SOURCE_SQL, productSourceValues(meal.id, source));
+      break;
     default:
       await transaction.runAsync(INSERT_SOURCE_SQL, librarySourceValues(meal.id, source));
   }
@@ -157,7 +238,14 @@ export async function selectMealEntrySource(executor: SqlExecutor, mealId: strin
     return rowToMealEntrySource(row);
   }
   const aiRow = await executor.getFirstAsync<AiSourceRow>(`SELECT ${AI_SOURCE_COLUMNS} FROM meal_entry_ai_sources WHERE meal_id = ?`, [mealId]);
-  return aiRow ? rowToAiEntrySource(aiRow) : null;
+  if (aiRow) {
+    return rowToAiEntrySource(aiRow);
+  }
+  const productRow = await executor.getFirstAsync<ProductSourceRow>(
+    `SELECT ${PRODUCT_SOURCE_COLUMNS} FROM meal_entry_product_sources WHERE meal_id = ?`,
+    [mealId],
+  );
+  return productRow ? rowToProductEntrySource(productRow) : null;
 }
 
 type Options = {

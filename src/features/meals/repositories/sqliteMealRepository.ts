@@ -119,6 +119,7 @@ export function createSqliteMealRepository(
           if (doesUpdateDetachSource(current, input)) {
             await transaction.runAsync('DELETE FROM meal_entry_sources WHERE meal_id = ?', [id]);
             await transaction.runAsync('DELETE FROM meal_entry_ai_sources WHERE meal_id = ?', [id]);
+            await transaction.runAsync('DELETE FROM meal_entry_product_sources WHERE meal_id = ?', [id]);
           }
           await transaction.runAsync(
             `UPDATE meals SET name = ?, calories = ?, protein = ?, carbs = ?, fat = ?, meal_type = ?, local_date = ?, local_time = ?, updated_at = ? WHERE id = ?`,
@@ -148,6 +149,7 @@ export function createSqliteMealRepository(
         await database.withExclusiveTransactionAsync(async (transaction) => {
           await transaction.runAsync('DELETE FROM meal_entry_sources WHERE meal_id = ?', [id]);
           await transaction.runAsync('DELETE FROM meal_entry_ai_sources WHERE meal_id = ?', [id]);
+          await transaction.runAsync('DELETE FROM meal_entry_product_sources WHERE meal_id = ?', [id]);
           await transaction.runAsync('DELETE FROM meals WHERE id = ?', [id]);
         });
       }),
@@ -164,6 +166,10 @@ export function createSqliteMealRepository(
             'DELETE FROM meal_entry_ai_sources WHERE meal_id IN (SELECT id FROM meals WHERE local_date = ?)',
             [date],
           );
+          await transaction.runAsync(
+            'DELETE FROM meal_entry_product_sources WHERE meal_id IN (SELECT id FROM meals WHERE local_date = ?)',
+            [date],
+          );
           deleted = (await transaction.runAsync('DELETE FROM meals WHERE local_date = ?', [date])).changes;
         });
         return deleted;
@@ -175,6 +181,7 @@ export function createSqliteMealRepository(
         await database.withExclusiveTransactionAsync(async (transaction) => {
           await transaction.runAsync('DELETE FROM meal_entry_sources', []);
           await transaction.runAsync('DELETE FROM meal_entry_ai_sources', []);
+          await transaction.runAsync('DELETE FROM meal_entry_product_sources', []);
           deleted = (await transaction.runAsync('DELETE FROM meals', [])).changes;
         });
         return deleted;

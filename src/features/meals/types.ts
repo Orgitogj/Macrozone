@@ -66,15 +66,36 @@ export type AiMealEntrySource = {
   loggedAt: string;
 };
 
-export type MealEntrySource = LibraryMealEntrySource | AiMealEntrySource;
+export type ProductEntryProvider = 'open_food_facts';
+
+export type ProductMealEntrySource = {
+  sourceType: 'product';
+  provider: ProductEntryProvider;
+  barcode: string;
+  providerProductName: string | null;
+  itemName: string;
+  serving: Serving;
+  baseNutrition: MacroTotals;
+  amount: number;
+  userReviewed: boolean;
+  lookedUpAt: string;
+  providerModifiedAt: string | null;
+  foodId: string | null;
+  logGroupId: string | null;
+  loggedAt: string;
+};
+
+export type MealEntrySource = LibraryMealEntrySource | AiMealEntrySource | ProductMealEntrySource;
 
 export type NewLibraryEntrySource = Omit<LibraryMealEntrySource, 'loggedAt' | 'logGroupId'>;
 
 export type NewAiEntrySource = Omit<AiMealEntrySource, 'loggedAt' | 'logGroupId'>;
 
+export type NewProductEntrySource = Omit<ProductMealEntrySource, 'loggedAt' | 'logGroupId'>;
+
 export type NewDiaryEntry = {
   input: MealInput;
-  source: NewLibraryEntrySource | NewAiEntrySource;
+  source: NewLibraryEntrySource | NewAiEntrySource | NewProductEntrySource;
 };
 
 export type RecentFoodUsage = {

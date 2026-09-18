@@ -4,6 +4,7 @@ import type {
   Meal,
   MealEntrySource,
   MealInput,
+  ProductMealEntrySource,
 } from '@/features/meals/types';
 import { isRecord } from '@/features/meals/utils/mealRecords';
 import { LIBRARY_LIMITS } from '@/features/library/constants';
@@ -91,6 +92,76 @@ function parseAiSource(value: Record<string, unknown>): AiMealEntrySource | null
   return { sourceType: 'ai', inputKind, mealTitle, itemName, amount, unit, matchedFoodId, logGroupId, loggedAt };
 }
 
+const PRODUCT_BARCODE_PATTERN = /^[0-9]{8,14}$/;
+
+const PRODUCT_BASIS_UNITS: readonly string[] = ['g', 'ml', 'serving'];
+
+function isNullableTimestamp(value: unknown): value is string | null {
+  return value === null || isTimestamp(value);
+}
+
+function parseProductSource(value: Record<string, unknown>): ProductMealEntrySource | null {
+  const {
+    provider,
+    barcode,
+    providerProductName,
+    itemName,
+    serving,
+    baseNutrition,
+    amount,
+    userReviewed,
+    lookedUpAt,
+    providerModifiedAt,
+    foodId,
+    logGroupId,
+    loggedAt,
+  } = value;
+  if (
+    provider !== 'open_food_facts' ||
+    typeof barcode !== 'string' ||
+    !PRODUCT_BARCODE_PATTERN.test(barcode) ||
+    !(providerProductName === null || (typeof providerProductName === 'string' && providerProductName.trim().length > 0 && providerProductName.length <= 200)) ||
+    !isShortName(itemName) ||
+    !isRecord(serving) ||
+    !isPositive(serving.amount) ||
+    typeof serving.unit !== 'string' ||
+    !PRODUCT_BASIS_UNITS.includes(serving.unit) ||
+    !isServingUnit(serving.unit) ||
+    !isRecord(baseNutrition) ||
+    !MACRO_KEYS.every((key) => isNonNegative(baseNutrition[key])) ||
+    !isPositive(amount) ||
+    typeof userReviewed !== 'boolean' ||
+    !isTimestamp(lookedUpAt) ||
+    !isNullableTimestamp(providerModifiedAt) ||
+    !isNullableId(foodId) ||
+    !isNullableId(logGroupId) ||
+    !isTimestamp(loggedAt)
+  ) {
+    return null;
+  }
+  return {
+    sourceType: 'product',
+    provider,
+    barcode,
+    providerProductName,
+    itemName,
+    serving: { amount: serving.amount, unit: serving.unit },
+    baseNutrition: {
+      calories: baseNutrition.calories as number,
+      protein: baseNutrition.protein as number,
+      carbs: baseNutrition.carbs as number,
+      fat: baseNutrition.fat as number,
+    },
+    amount,
+    userReviewed,
+    lookedUpAt,
+    providerModifiedAt,
+    foodId,
+    logGroupId,
+    loggedAt,
+  };
+}
+
 export function parseStoredMealEntrySource(value: unknown): MealEntrySource | null {
   if (!isRecord(value)) {
     return null;
@@ -98,6 +169,8 @@ export function parseStoredMealEntrySource(value: unknown): MealEntrySource | nu
   switch (value.sourceType) {
     case 'ai':
       return parseAiSource(value);
+    case 'product':
+      return parseProductSource(value);
     default:
       return parseLibrarySource(value);
   }
