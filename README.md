@@ -888,6 +888,13 @@ Business logic is implemented as pure functions and unit-tested with Jest (`npm 
 - The theme preference is stored per device and is not synced.
 - Android date and time dialogs and confirmation alerts are drawn by the system, so they follow the device's light or dark setting rather than an explicit in-app choice.
 - If Home is left open on today past midnight, it moves to the new day the next time the screen gains focus.
+- Accounts and cloud backup need your own Supabase project. Without `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, MacroZone stays local-only and says so.
+- The cloud SQL migrations in `supabase/migrations/` and the `delete-account` Edge Function have not been applied to or deployed in any project by this repository. Follow [Deploying accounts and sync](#deploying-accounts-and-sync).
+- Exporting your data to a file is not implemented yet. When you delete an account you can copy its data into on-device (guest) mode instead.
+- If the response to a successful account deletion is lost and the app retries, the server no longer recognizes the deleted session and the retry reports an expired session. The account is already gone; signing in again will fail with invalid credentials.
+- Account sync covers meals (with their source snapshots), foods and their barcode links, saved meals, recipes, and the nutrition plan. Theme preference, reminders, the online product cache, legacy recovery records, and AI preferences stay on the device.
+- On web, one browser tab writes at a time through a serial queue and compensating writes, but separate tabs are not coordinated: two tabs writing at the same moment can still interleave, because browser storage offers no cross-tab transaction. Use one tab at a time for the same account.
+- Sync has been verified with automated tests, a fake cloud that mirrors the SQL contract, and the SQL itself in PGlite. The `delete-account` Edge Function's logic has been tested with GoTrue and PostgREST replaced by fakes. None of it has been run against a live Supabase project, in the Supabase Edge runtime, or on devices.
 - `npm audit` reports advisories in transitive Expo CLI and build-tooling dependencies. npm's only suggested fix is an Expo major-version upgrade, so these are tracked rather than force-fixed.
 
 ## Roadmap
@@ -904,8 +911,8 @@ Work proceeds one phase at a time:
 7. **Fast logging:** food library with servings, recent foods, favorites, saved meals, recipes, a logging hub, and copying a day.
 8. **AI-assisted logging:** estimates from a description or photo through a secure MacroZone AI service, always reviewed before saving.
 9. **Barcode scanning and online food lookup:** Open Food Facts products with review before save, local caching, and My Foods linking.
-10. **Progress tracking:** weight, body measurements, trends, charts.
-11. **Accounts and optional cloud sync:** Supabase, with offline use preserved.
+10. **Accounts and optional cloud sync:** optional accounts, secure cloud backup, and offline-first synchronization with Supabase, with local-only use preserved.
+11. **Progress tracking:** weight, body measurements, trends, charts.
 12. **Advanced features:** evaluated and delivered as separate projects (health platform integrations and so on).
 
 Nutrition values and future goal calculations are estimates and are not medical advice.
