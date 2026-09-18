@@ -321,7 +321,7 @@ Each repository getter is split into a native file (SQLite) and a `.web.ts` file
 - Transactions run on that same foreign-key-enabled connection (`BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK`), and a queue keeps other statements from interleaving with them. `expo-sqlite`'s own `withExclusiveTransactionAsync` is not used, because it opens a separate connection on which the pragma has not been set.
 - Repositories also clear or delete references explicitly inside their transactions. This mirrors the web implementation and is defense in depth; SQLite enforcement remains the final protection.
 
-### SQLite schema (`macrozone.db`, schema version 5)
+### SQLite schema (`macrozone.db` for local-only use, schema version 6)
 
 | Table | Purpose | Key columns and constraints |
 | ----- | ------- | --------------------------- |
@@ -338,6 +338,12 @@ Each repository getter is split into a native file (SQLite) and a `.web.ts` file
 | `meal_entry_product_sources` (v5) | Snapshot of a meal added from a reviewed barcode product (one per meal at most) | `meal_id → meals ON DELETE CASCADE` (primary key), `provider` (open_food_facts), `barcode` (8–14 digits, text), `provider_product_name`, `item_name`, `basis_amount` / `basis_unit` (g, ml, serving), reviewed base nutrition, `amount`, `user_reviewed`, `looked_up_at`, `provider_modified_at`, `food_id → foods ON DELETE SET NULL`, `log_group_id`, `logged_at` |
 | `food_barcodes` (v5) | Links a barcode to one of your foods | `barcode` (primary key, 8–14 digits), `food_id → foods ON DELETE CASCADE`, `linked_at` |
 | `online_product_cache` (v5) | Normalized product lookups kept for offline use (not the raw response) | `(provider, barcode)` primary key, `status` (found or not_found), `payload_version`, `payload_json` (normalized product, valid JSON, only when found), `fetched_at`, `stale_at`, `expires_at`, `provider_modified_at` |
+| `account_database_metadata` (v6) | Which scope this database file belongs to | `id` (always 1), `scope` (guest or account), `account_key` (the derived key, never the raw user id), `updated_at` |
+| `sync_state` (v6) | One row of sync bookkeeping | `id` (always 1), `cursor` (last applied cloud change), `applying_remote` (suppresses outbox triggers), `last_success_at`, `last_error_code`, `blocked_reason` |
+| `sync_outbox` (v6) | Local changes waiting to be sent | `seq` (order), `operation_id` (stable UUID for safe retries), `entity_type`, `entity_id`, `kind` (upsert or delete), `base_revision`, `state` (pending, sealed, blocked), `attempt_count`, `next_attempt_at`, `last_error_code`; a partial unique index keeps at most one pending row per entity |
+| `sync_entity_revisions` (v6) | What the cloud last confirmed for each entity | `(entity_type, entity_id)` primary key, `server_revision`, `deleted`, `payload_hash`, `updated_at` |
+| `sync_conflicts` (v6) | Changes that need your decision | `id`, `entity_type`, `entity_id`, `reason`, both payloads, `local_deleted` / `cloud_deleted`, `cloud_revision`, `status` (open or resolved), `resolution`, `detected_at`, `resolved_at`; a partial unique index keeps one open conflict per entity |
+| `imported_guest_datasets` (v6) | Your decision about data logged before signing in | `dataset_id`, `status` (declined, deferred, in_progress, completed), `counts_json`, timestamps |
 
 Indexes: meals `(local_date, local_time, created_at)`, `(local_date, meal_type)`, `(created_at)`; foods `(name_key, id)`, `(is_favorite, name_key, id)`, and the unique definition index; saved meals and recipes `(name_key, id)`; item and ingredient `food_id`; entry sources `(food_id, logged_at)`, `(logged_at)`, `(log_group_id)`; AI entry sources `(log_group_id)`, `(matched_food_id)`; product entry sources `(food_id)`, `(barcode)`; food barcodes `(food_id)`; product cache `(fetched_at, provider, barcode)`, `(expires_at)`.
 
@@ -352,6 +358,7 @@ Onboarding status (`completed` or `skipped`) is stored in `app_metadata` under t
 - Version 3 adds the food library, saved meals, recipes, and meal entry snapshots. It only creates new tables and indexes; existing meals, goals, and recovery records are not changed.
 - Version 5 adds `online_product_cache`, `food_barcodes`, and `meal_entry_product_sources` with their indexes. It only creates new tables; existing meals, foods, snapshots, goals, and recovery records are not changed.
 - Version 4 adds `meal_entry_ai_sources` and its indexes. It is a separate table because the CHECK constraints of `meal_entry_sources` cannot be changed in place; no existing row is changed or recalculated.
+- Version 6 adds the sync tables above and the triggers that record local changes. It only creates new tables, indexes, and triggers; existing meals, foods, snapshots, goals, and recovery records are not changed, and a database that has never been used with an account records nothing.
 - Future data (measurements) will be added as new numbered migrations in the phases that introduce those features. Meal reminders are device settings and are stored in AsyncStorage, not SQLite.
 
 ### Migration from AsyncStorage
@@ -748,6 +755,7 @@ Business logic is implemented as pure functions and unit-tested with Jest (`npm 
 
 - **Tests stay local.** Test files live next to the code in `__tests__/` folders, with shared helpers in `src/testing/`. Both paths are in `.gitignore`, so tests are not committed. The Jest configuration (`package.json` and `jest.environment.js`) is committed, and `npm test` passes when no tests are present.
 - **Database tests use real SQLite.** `jest.environment.js` exposes an in-memory database from Node's built-in `node:sqlite` (Node 22.5 or later), adapted to the same `SqlDatabase` interface the app uses. This lets repository, migration, and import tests run real SQL, including constraints and transaction rollbacks, without a device.
+- **Cloud SQL tests use real Postgres.** The account and sync migration is exercised with PGlite (Postgres compiled to WebAssembly) in a scratch harness, never against a Supabase project. A pgTAP suite for the Supabase CLI lives in `supabase/tests/database/` and is git-ignored like the other tests.
 - **Date tests are deterministic.** `jest.environment.js` runs every test file in UTC, whatever the machine timezone. Tests can switch to other timezones through the environment's `__setTestTimeZone` hook, for example to cover UTC+14, UTC−10, and DST changes. Setting `process.env.TZ` inside a test has no effect, because Jest sandboxes `process.env`.
 
 ## Current limitations
