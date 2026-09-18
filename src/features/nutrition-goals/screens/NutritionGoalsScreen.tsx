@@ -11,7 +11,7 @@ import { ESTIMATE_DISCLAIMER } from '@/features/nutrition-goals/constants';
 import { useGoalsNavigation } from '@/features/nutrition-goals/hooks/useGoalsNavigation';
 import { useNutritionPlan } from '@/features/nutrition-goals/hooks/useNutritionPlan';
 import { RemindersEntryCard, useReminderNavigation } from '@/features/reminders';
-import { AppearanceSettings } from '@/features/settings';
+import { AppearanceSettings, DataSourcesCard } from '@/features/settings';
 import { spacing } from '@/theme';
 
 export function NutritionGoalsScreen() {
@@ -45,6 +45,7 @@ export function NutritionGoalsScreen() {
         ) : null}
         <RemindersEntryCard onPress={reminderNavigation.openReminders} />
         <AppearanceSettings />
+        <DataSourcesCard />
       </View>
     </ScrollScreen>
   );
