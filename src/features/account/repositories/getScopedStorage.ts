@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { getAccountScopeStore } from '@/features/account/services/accountScopeStore';
 import { createScopedKeyValueStorage, type KeyValueStorage } from '@/features/account/repositories/scopedKeyValueStorage';
+import { isAccountWriteBlocked } from '@/features/account/services/accountWriteBlock';
 import { getLocalChangeNotifier } from '@/features/sync/services/syncTriggers';
 
 let scopedStorage: KeyValueStorage | null = null;
@@ -18,6 +19,7 @@ export function getScopedStorage(): KeyValueStorage {
     getScope: () => getAccountScopeStore().getScope(),
     getEpoch: () => getAccountScopeStore().getEpoch(),
     onAccountWrite: () => getLocalChangeNotifier().notify(),
+    isWriteBlocked: (scope) => scope.kind === 'account' && isAccountWriteBlocked(scope.accountKey),
   });
   return scopedStorage;
 }

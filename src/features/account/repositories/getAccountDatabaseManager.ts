@@ -6,6 +6,7 @@ import {
 } from '@/features/account/repositories/localAccountDatabaseManager';
 import type { LocalAccountDatabaseManager } from '@/features/account/types';
 import { createSerializedSqlDatabase, enableForeignKeys } from '@/storage/database/connection';
+import { isAccountWriteBlocked } from '@/features/account/services/accountWriteBlock';
 import { getLocalChangeNotifier } from '@/features/sync/services/syncTriggers';
 import { prepareDatabase } from '@/storage/database/prepareDatabase';
 
@@ -25,6 +26,7 @@ export function getAccountDatabaseManager(): LocalAccountDatabaseManager {
     },
     prepare: (database) => prepareDatabase(database),
     onAccountWrite: () => getLocalChangeNotifier().notify(),
+    isWriteBlocked: (scope) => scope.kind === 'account' && isAccountWriteBlocked(scope.accountKey),
     deleteDatabase: async (fileName) => {
       await deleteDatabaseAsync(fileName);
     },
