@@ -14,6 +14,8 @@
     "server:install": "npm --prefix server ci",
     "server:start": "npm --prefix server start",
     "doctor": "npx expo-doctor",
+    "check:secrets": "node scripts/checkSecrets.mjs",
+    "check:tracked": "node scripts/checkTrackedFiles.mjs",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "check": "npm run lint && npm run typecheck && npm run typecheck:server && npm run typecheck:functions && npm test"
