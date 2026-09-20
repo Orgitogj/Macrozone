@@ -13,6 +13,7 @@ import { NoticeCard } from '@/components/ui/NoticeCard';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { TextButton } from '@/components/ui/TextButton';
+import { DeletionPendingCard } from '@/features/account/components/DeletionPendingCard';
 import { useAccountNavigation } from '@/features/account/hooks/useAccountNavigation';
 import { useAccountSession } from '@/features/account/hooks/useAccountSession';
 import { getAccountServices } from '@/features/account/services/getAccountServices';
@@ -56,6 +57,7 @@ export function DeleteAccountScreen() {
   const running = useRef(false);
   const mounted = useRef(true);
   const { colors } = useTheme();
+  const pending = state.deletionPending;
 
   useEffect(
     () => () => {
@@ -77,6 +79,24 @@ export function DeleteAccountScreen() {
 
   const confirmationMatches = confirmation.trim().toUpperCase() === CONFIRMATION_WORD;
   const canSubmit = confirmationMatches && password.length > 0 && !busy;
+
+  const cancelDeletion = useCallback(() => {
+    if (running.current) {
+      return;
+    }
+    running.current = true;
+    setBusy(true);
+    void services
+      .cancelPendingDeletion()
+      .catch(() => undefined)
+      .finally(() => {
+        running.current = false;
+        if (mounted.current) {
+          setBusy(false);
+          setOutcome(null);
+        }
+      });
+  }, [services]);
 
   const submit = useCallback(() => {
     if (running.current || !canSubmit) {
@@ -186,7 +206,8 @@ export function DeleteAccountScreen() {
           </AppCard>
         ) : null}
 
-        <FormField label='Before deleting'>
+        {pending === null ? (
+          <FormField label='Before deleting'>
           <ChoiceList
             options={DELETE_ACCOUNT_CHOICES}
             value={mode}
@@ -194,7 +215,8 @@ export function DeleteAccountScreen() {
             accessibilityLabel='What happens to your data before the account is deleted'
             disabled={busy}
           />
-        </FormField>
+          </FormField>
+        ) : null}
 
         <PasswordField
           label='Your password'
@@ -244,6 +266,14 @@ export function DeleteAccountScreen() {
           <NoticeCard tone='danger' title='Nothing was deleted' message={outcome.message} />
         ) : null}
 
+        {pending !== null && outcome === null ? (
+          <DeletionPendingCard pending={pending} busy={busy} onCancel={cancelDeletion} />
+        ) : null}
+
+        {outcome !== null && outcome.status === 'unconfirmed' ? (
+          <NoticeCard tone='warning' title='Deletion not confirmed' message={outcome.message} />
+        ) : null}
+
         {outcome !== null && outcome.status === 'copied_not_deleted' ? (
           <NoticeCard
             tone='warning'
@@ -254,7 +284,7 @@ export function DeleteAccountScreen() {
 
         <View style={styles.actions}>
           <AppButton
-            label={outcome !== null && outcome.status === 'copied_not_deleted' ? 'Try Deleting Again' : 'Delete My Account'}
+            label={pending !== null || (outcome !== null && outcome.status === 'copied_not_deleted') ? 'Try Deleting Again' : 'Delete My Account'}
             variant='danger'
             onPress={submit}
             loading={busy}
@@ -265,7 +295,11 @@ export function DeleteAccountScreen() {
                 : 'Deletes the cloud account permanently and removes its data from this device'
             }
           />
-          <TextButton label='Keep my account' onPress={navigation.replaceWithAccount} disabled={busy} />
+          {pending === null ? (
+            <TextButton label='Keep my account' onPress={navigation.replaceWithAccount} disabled={busy} />
+          ) : (
+            <TextButton label='Cancel deletion and keep my account' onPress={cancelDeletion} disabled={busy} />
+          )}
         </View>
       </View>
     </ScrollScreen>

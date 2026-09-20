@@ -9,6 +9,7 @@ import { KeyValueRow } from '@/components/ui/KeyValueRow';
 import { NoticeCard } from '@/components/ui/NoticeCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { TextButton } from '@/components/ui/TextButton';
+import { DeletionPendingCard } from '@/features/account/components/DeletionPendingCard';
 import { SyncStatusCard } from '@/features/account/components/SyncStatusCard';
 import { useAccountNavigation } from '@/features/account/hooks/useAccountNavigation';
 import { useAccountSession } from '@/features/account/hooks/useAccountSession';
@@ -27,7 +28,23 @@ export function AccountScreen() {
   const guestData = useGuestImport(signedIn);
   const [signOutMessage, setSignOutMessage] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const running = useRef(false);
+
+  const cancelDeletion = useCallback(() => {
+    if (running.current) {
+      return;
+    }
+    running.current = true;
+    setCancelling(true);
+    void services
+      .cancelPendingDeletion()
+      .catch(() => undefined)
+      .finally(() => {
+        running.current = false;
+        setCancelling(false);
+      });
+  }, [services]);
 
   const signOut = useCallback(() => {
     if (running.current) {
@@ -52,6 +69,25 @@ export function AccountScreen() {
     description !== null &&
     totalGuestItems(description.counts) > 0 &&
     (description.decision === null || description.decision === 'deferred' || description.decision === 'in_progress');
+
+  if (state.deletionPending !== null && signedIn) {
+    return (
+      <ScrollScreen edges={['bottom']}>
+        <View style={styles.content}>
+          <AppCard style={styles.card}>
+            <SectionHeader title='Your account' />
+            <KeyValueRow label='Email' value={state.email ?? 'Not available'} />
+          </AppCard>
+          <DeletionPendingCard
+            pending={state.deletionPending}
+            busy={cancelling}
+            onFinish={navigation.openDeleteAccount}
+            onCancel={cancelDeletion}
+          />
+        </View>
+      </ScrollScreen>
+    );
+  }
 
   if (!signedIn) {
     return (
