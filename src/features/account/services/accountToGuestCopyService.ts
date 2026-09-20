@@ -8,7 +8,7 @@ import {
   type GuestImportProgress,
 } from '@/features/account/services/guestImportService';
 import { listAggregateIds, readAggregate, writeAggregate } from '@/features/sync/repositories/sqliteAggregateStore';
-import { encodeAggregate, sameContent } from '@/features/sync/utils/aggregatePayload';
+import { encodeAggregate, payloadHash, sameContent } from '@/features/sync/utils/aggregatePayload';
 import { copyAggregateAsNewEntity } from '@/features/sync/utils/duplicateAggregate';
 import type { SyncAggregate, SyncEntityType } from '@/features/sync/types';
 import type { SqlDatabase, SqlExecutor } from '@/storage/database/types';
@@ -18,6 +18,7 @@ export type AccountCopyStatus = 'in_progress' | 'completed';
 
 export type AccountCopySummary = {
   datasetId: string;
+  sourceFingerprint: string;
   copied: GuestDataCounts;
   alreadyPresent: GuestDataCounts;
   duplicated: GuestDataCounts;
@@ -53,6 +54,7 @@ const VERIFY_FAILED = 'MacroZone could not confirm the copy on this device, so n
 function emptySummary(datasetId: string): AccountCopySummary {
   return {
     datasetId,
+    sourceFingerprint: '',
     copied: { ...EMPTY_COUNTS },
     alreadyPresent: { ...EMPTY_COUNTS },
     duplicated: { ...EMPTY_COUNTS },
@@ -122,6 +124,15 @@ export function createAccountToGuestCopyService({
     );
   };
 
+  const fingerprintOf = (entities: readonly SourceEntity[]): string =>
+    payloadHash({
+      entities: entities.map((entity) => ({
+        entityType: entity.entityType,
+        entityId: entity.entityId,
+        hash: payloadHash(encodeAggregate(entity.aggregate)),
+      })),
+    });
+
   const readSnapshot = async (): Promise<SourceEntity[]> => {
     const account = await getAccountDatabase();
     const entities: SourceEntity[] = [];
@@ -159,6 +170,8 @@ export function createAccountToGuestCopyService({
       return { datasetId, counts, status };
     },
 
+    fingerprintAccountData: async (): Promise<string> => fingerprintOf(await readSnapshot()),
+
     copyToGuest: async ({ onProgress }: AccountCopyOptions = {}): Promise<AccountCopySummary> => {
       const datasetId = datasetIdFor();
       const guest = await openGuestDatabase();
@@ -168,7 +181,11 @@ export function createAccountToGuestCopyService({
       }
 
       const snapshot = await readSnapshot();
-      const record: CopyRecord = { counts: { ...existing.record.counts, datasetId }, map: { ...existing.record.map } };
+      const fingerprint = fingerprintOf(snapshot);
+      const record: CopyRecord = {
+        counts: { ...existing.record.counts, datasetId, sourceFingerprint: fingerprint },
+        map: { ...existing.record.map },
+      };
       const mapping = new Map<string, string>(Object.entries(record.map));
       const timestamp = now().toISOString();
 

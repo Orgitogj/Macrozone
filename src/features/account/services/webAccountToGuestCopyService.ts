@@ -27,7 +27,7 @@ import {
   serializePlan,
   type WebSnapshotState,
 } from '@/features/sync/repositories/webAggregateStore';
-import { encodeAggregate, sameContent } from '@/features/sync/utils/aggregatePayload';
+import { encodeAggregate, payloadHash, sameContent } from '@/features/sync/utils/aggregatePayload';
 import { copyAggregateAsNewEntity } from '@/features/sync/utils/duplicateAggregate';
 import type { SyncAggregate } from '@/features/sync/types';
 import { createId } from '@/utils/id';
@@ -52,6 +52,7 @@ const RESTORE_FAILED =
 function emptySummary(datasetId: string): AccountCopySummary {
   return {
     datasetId,
+    sourceFingerprint: '',
     copied: { ...EMPTY_COUNTS },
     alreadyPresent: { ...EMPTY_COUNTS },
     duplicated: { ...EMPTY_COUNTS },
@@ -157,7 +158,26 @@ export function createWebAccountToGuestCopyService({
     }
   };
 
+  const fingerprintOf = (snapshot: WebSnapshotState): string =>
+    payloadHash({
+      entities: listSnapshotEntities(snapshot).map((entity) => {
+        const aggregate = readAggregateFromSnapshot(snapshot, entity.entityType, entity.entityId);
+        return {
+          entityType: entity.entityType,
+          entityId: entity.entityId,
+          hash: aggregate === null ? 'unreadable' : payloadHash(encodeAggregate(aggregate)),
+        };
+      }),
+    });
+
+  const readAccountSnapshot = async (): Promise<WebSnapshotState> => {
+    const prefix = accountStoragePrefix(requireAccountKey());
+    return readSnapshot((key) => `${prefix}${key}`);
+  };
+
   return {
+    fingerprintAccountData: async (): Promise<string> => fingerprintOf(await readAccountSnapshot()),
+
     describeAccountData: async (): Promise<{ datasetId: string; counts: GuestDataCounts; status: AccountCopyStatus | null }> => {
       const accountKey = requireAccountKey();
       const datasetId = accountCopyDatasetId(accountKey);
@@ -187,6 +207,7 @@ export function createWebAccountToGuestCopyService({
         }
 
         const counts = emptySummary(datasetId);
+        counts.sourceFingerprint = fingerprintOf(account);
         const mapping = new Map<string, string>();
         const timestamp = now().toISOString();
 
