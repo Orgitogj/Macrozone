@@ -11,7 +11,11 @@ export async function deriveAccountKey(
     throw new Error('An account key needs a user id.');
   }
   const hash = await digest(CryptoDigestAlgorithm.SHA256, `macrozone.account.${trimmed}`);
-  return hash.toLowerCase().replace(/[^0-9a-f]/g, '').slice(0, ACCOUNT_KEY_LENGTH);
+  const key = hash.toLowerCase().replace(/[^0-9a-f]/g, '').slice(0, ACCOUNT_KEY_LENGTH);
+  if (key.length !== ACCOUNT_KEY_LENGTH) {
+    throw new Error('MacroZone could not derive a secure account key on this device.');
+  }
+  return key;
 }
 
 export function accountDatabaseName(accountKey: string): string {
