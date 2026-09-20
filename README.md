@@ -118,6 +118,11 @@ Optional features are configured with environment variables. Copy `.env.example`
 | `npm run test:watch`| Run unit tests in watch mode                             |
 | `npm run check`     | Run lint, app and server typechecks, and tests           |
 | `npm run doctor`    | Run Expo Doctor (checks config and dependency versions)  |
+| `npm run check:secrets` | Scan every tracked text file for keys, tokens and private keys |
+| `npm run check:tracked` | Fail if tests, `.env` files, build output or signing material are tracked |
+| `npm run check:migrations` | Static review of the Supabase migrations (RLS, policies, grants, search_path) |
+| `npm run check:bundle <dir>` | Scan an `expo export` output for secrets and server-only names |
+| `npm run release:check` | Everything in `npm run check`, plus the three scans above and Expo Doctor |
 
 When adding or updating Expo-related packages, use `npx expo install <package>` so that versions stay compatible with the installed SDK.
 
@@ -256,6 +261,8 @@ src/
                               (.tsx native, .web.tsx web), ProgressBar, ScreenHeader, SectionHeader,
                               KeyValueRow, NoticeCard, StepHeader, AppSwitch, SearchField, ChipGroup,
                               loading/empty/error states
+  config/                     Environment report: which optional features are configured, and refusal of
+                              anything that looks like a secret in a public variable
   hooks/                      Cross-feature hooks: useSelectedDate, useTodayDateKey, useDebouncedValue
   storage/database/           SQLite access: SqlDatabase interface, connection setup (foreign keys, serialized
                               transactions), open/prepare, ordered schema migrations, shared write queue,
@@ -264,6 +271,8 @@ src/
   utils/                      Pure shared utilities: dates, times, date/time input conversion, number input, formatting, ids,
                               single-flight guard, serial queue, checksum, route params, async loading state,
                               device time zone, confirmation dialog
+eas.json                      EAS build profiles: development, preview and production
+scripts/                      Release checks (secret scan, tracked files, migrations, exported bundles)
 jest.environment.js           Jest environment: pins/switches timezones, provides in-memory SQLite for tests
 assets/images/                App icon, adaptive icons, splash image, favicon
 supabase/migrations/          Cloud SQL for accounts and sync, and the protected account-deletion function
