@@ -16,9 +16,12 @@
     "doctor": "npx expo-doctor",
     "check:secrets": "node scripts/checkSecrets.mjs",
     "check:tracked": "node scripts/checkTrackedFiles.mjs",
+    "check:migrations": "node scripts/checkMigrations.mjs",
+    "check:bundle": "node scripts/checkBundle.mjs",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
-    "check": "npm run lint && npm run typecheck && npm run typecheck:server && npm run typecheck:functions && npm test"
+    "check": "npm run lint && npm run typecheck && npm run typecheck:server && npm run typecheck:functions && npm test",
+    "release:check": "npm run check && npm run check:secrets && npm run check:tracked && npm run check:migrations && npm run doctor"
   },
   "jest": {
     "preset": "jest-expo",
