@@ -834,12 +834,120 @@ Do this first in a disposable, non-production Supabase project.
 ### Signing out and deleting an account
 
 - **Sign out** stops new syncs, cancels the active one, keeps unsent changes in the outbox, closes the account database, clears the session, switches back to the guest database, and reloads the screens. It deletes nothing. If part of it fails, the app says which part.
+- **While a deletion is waiting to finish**, MacroZone puts the account into a read-only state on this device: logging,
+  editing, syncing, signing out and switching accounts are refused with a clear message until the deletion finishes or
+  the person cancels it. The pending state is written to device storage, so it survives an app restart or a browser
+  reload, and it also blocks database handles that were taken before it started. Before each attempt (including a
+  retry) MacroZone fingerprints the account data and compares it with the fingerprint taken when the copy was made; if
+  anything changed, it refuses to delete and asks for a fresh copy. A response that does not clearly say "deleted" is
+  reported as unconfirmed rather than as success, and the retry is safe because the cloud function is idempotent.
 - **Delete account** explains what is deleted and offers two explicit choices plus Cancel:
   1. **Copy my data to this device, then delete my account.** Syncing stops, MacroZone reads a consistent snapshot of the account database in one transaction, and copies it into the guest (on-device) data in dependency order (foods, saved meals, recipes, meals, goals). It reuses the guest-import rules: immutable meal snapshots are kept as they are, existing guest records are never overwritten, an identical food is matched instead of duplicated, a different item with the same id is saved as a separate copy, and different nutrition goals keep the guest version. Each item is written in its own transaction together with a progress record keyed by the account, so an interrupted copy resumes and a completed copy is never repeated. Every copied item is read back before the cloud account is touched; if the copy or that check fails, nothing is deleted and the screen says why.
   2. **Delete my account and remove this device's account data.** Nothing is copied.
 
   In both cases MacroZone then asks the `delete-account` function to delete the cloud account (password re-checked on the server), signs out, switches to guest data, and only after that removes the account database file. That file is locked to the deleted account and could never be opened again, so it is not presented as a kept copy. If the copy succeeded but the cloud deletion failed, the copied data stays in guest mode, the account stays signed in, and trying again deletes the account without copying a second time. Repeated taps join the deletion already running. The guest database is never deleted, and partial failures are reported rather than shown as success.
 - **Web:** the same choices exist. The copy runs through a serial queue, writes the guest keys in one `multiSet`, restores the previous guest values if the write fails (and says so if the restore also fails), and reads the written values back before deleting anything. A browser crash in the middle of the write, or another tab writing at the same time, can still leave a partial state, because browser storage has no cross-key or cross-tab transaction.
+
+## Releasing MacroZone
+
+### Environments
+
+| Environment | How it runs | Supabase project | Open Food Facts |
+| ----------- | ----------- | ---------------- | --------------- |
+| Development | `npm start` with a development build or Expo Go | A local or disposable project | Staging by default |
+| Preview | `eas build --profile preview` (internal distribution) | A disposable non-production project | Staging |
+| Production | `eas build --profile production` | The production project | Production |
+
+The profiles live in `eas.json`. Each one sets `EXPO_PUBLIC_OPEN_FOOD_FACTS_ENV`; every other public variable is
+supplied per profile through EAS environment variables. `app.json` carries the identifiers used by both stores:
+
+| Setting | Value |
+| ------- | ----- |
+| iOS bundle identifier | `com.macrozone.app` |
+| Android package | `com.macrozone.app` |
+| Version | `1.0.0` (`ios.buildNumber` `1`, `android.versionCode` `1`) |
+| Runtime version | Follows the app version |
+
+**Change both identifiers before the first store submission if you publish under a different domain**: they can never
+be changed afterwards for an app that is already listed.
+
+### Environment variables
+
+Only the five public variables in `.env.example` exist, and all of them are compiled into the bundle. At startup a
+development build prints a line for every optional feature that is misconfigured, and it refuses to treat any value
+that looks like a secret (a JWT, `sb_secret_…`, `sbp_…`, `sk-…`, a private key block) as configuration. A missing or
+invalid value never breaks the app: the feature says it is unavailable and everything else keeps working.
+
+**No service-role key, database password, JWT signing secret or management token belongs in the app, `app.json`,
+`eas.json` or any `EXPO_PUBLIC_*` variable.** The only place a service-role key is used is inside the `delete-account`
+Edge Function, where Supabase injects it into the server environment.
+
+### Database migrations
+
+```bash
+supabase link --project-ref <ref>
+supabase db push                 # applies supabase/migrations in filename order
+npm run check:migrations         # static review of RLS, policies, grants and search_path
+```
+
+Both migrations are safe to run on a fresh database and on one that already has the earlier migration: tables use
+`create table if not exists`, functions use `create or replace`, and the removed deletion RPC is dropped with
+`drop function if exists`.
+
+### Edge Function
+
+```bash
+supabase functions deploy delete-account     # keep JWT verification on
+supabase functions logs delete-account       # outcome lines only: no tokens, emails or ids
+```
+
+The function reads `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` from the server environment that
+Supabase provides. It accepts only `POST` with a JSON body of at most 4 KB, requires a valid access token, re-checks the
+password with GoTrue, rate limits repeated attempts per caller, and ignores any user id in the request body.
+
+### EAS builds
+
+```bash
+npm install --global eas-cli
+eas login
+eas init                       # writes the project id into app.json
+eas build --profile preview --platform android
+eas build --profile production --platform all
+eas submit --profile production --platform all
+```
+
+### Release checklist
+
+1. `npm run release:check` (lint, all four typechecks, Jest, secret scan, tracked-file scan, migration review, Expo Doctor).
+2. `npx expo export --platform android|ios|web` and `npm run check:bundle <output-dir>` for each one.
+3. `git diff --check` and confirm a clean working tree.
+4. Apply migrations and deploy the Edge Function to a disposable project, then run the manual checks below.
+5. Bump `version`, `ios.buildNumber` and `android.versionCode` in `app.json`.
+6. Build with the production profile, install it on a real device and repeat the manual checks against the production project.
+7. Tag the release commit.
+
+### Rollback
+
+- **App:** the previous build stays available in the store console; halt the staged rollout or resubmit the previous
+  build. Schema version 6 is additive, so an older build keeps working with a newer local database as long as its
+  schema version is not higher than the build expects; a database created by a newer build is refused rather than
+  downgraded.
+- **Edge Function:** `supabase functions deploy delete-account` from the previous commit. While it is broken, account
+  deletion fails closed and reports "not confirmed"; nothing is deleted.
+- **Database:** the migrations only add objects, so a rollback means deploying the previous app build, not dropping
+  tables. Never drop `sync_entities` or `sync_operations` to "reset" an account; use `delete_account_data`.
+- **Sync:** if a release must be pulled, unsent local changes stay in each device's outbox and sync when a working
+  build is installed.
+
+### What is verified automatically, and what is not
+
+- **Automated:** typechecks, lint, the full Jest suite (including the deletion barrier, account isolation, sync and
+  Edge Function logic against fakes), the SQL contract in PGlite, Expo Doctor, all three exports, and the secret,
+  tracked-file, migration and bundle scans.
+- **Needs a disposable Supabase project:** sign-up and confirmation emails, password reset links, PKCE exchange, token
+  refresh, real RLS enforcement, the deployed Edge Function, and account deletion end to end.
+- **Needs a real device or emulator:** camera and barcode scanning, notifications and reminder delivery, SecureStore
+  behavior, deep links from an email client, background and offline transitions, and performance on low-end hardware.
 
 ## Nutrition goal calculations
 
