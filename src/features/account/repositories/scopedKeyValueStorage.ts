@@ -1,3 +1,4 @@
+import { AccountDeletionPendingError } from '@/features/account/services/deletionBarrier';
 import { AccountScopeChangedError, type AccountScope } from '@/features/account/types';
 import { accountStoragePrefix } from '@/features/account/utils/accountKey';
 
@@ -18,11 +19,13 @@ export function createScopedKeyValueStorage({
   getScope,
   getEpoch,
   onAccountWrite,
+  isWriteBlocked = () => false,
 }: {
   storage: KeyValueStorage;
   getScope: () => AccountScope;
   getEpoch: () => number;
   onAccountWrite?: () => void;
+  isWriteBlocked?: (scope: AccountScope) => boolean;
 }): KeyValueStorage {
   const notify = () => {
     if (getScope().kind === 'account') {
@@ -37,6 +40,14 @@ export function createScopedKeyValueStorage({
     return scopedKeyFor(getScope(), key);
   };
 
+  const mapWriteKey = (key: string, epoch: number): string => {
+    const scope = getScope();
+    if (scope.kind === 'account' && isWriteBlocked(scope)) {
+      throw new AccountDeletionPendingError();
+    }
+    return mapKey(key, epoch);
+  };
+
   return {
     getItem: (key) => {
       const epoch = getEpoch();
@@ -44,25 +55,25 @@ export function createScopedKeyValueStorage({
     },
     setItem: async (key, value) => {
       const epoch = getEpoch();
-      await storage.setItem(mapKey(key, epoch), value);
+      await storage.setItem(mapWriteKey(key, epoch), value);
       notify();
     },
     removeItem: async (key) => {
       const epoch = getEpoch();
-      await storage.removeItem(mapKey(key, epoch));
+      await storage.removeItem(mapWriteKey(key, epoch));
       notify();
     },
     multiSet: storage.multiSet
       ? (pairs) => {
           const epoch = getEpoch();
-          const mapped = pairs.map(([key, value]): [string, string] => [mapKey(key, epoch), value]);
+          const mapped = pairs.map(([key, value]): [string, string] => [mapWriteKey(key, epoch), value]);
           return (storage.multiSet?.(mapped) ?? Promise.resolve()).then(notify);
         }
       : undefined,
     multiRemove: storage.multiRemove
       ? (keys) => {
           const epoch = getEpoch();
-          const mapped = keys.map((key) => mapKey(key, epoch));
+          const mapped = keys.map((key) => mapWriteKey(key, epoch));
           return storage.multiRemove?.(mapped) ?? Promise.resolve();
         }
       : undefined,

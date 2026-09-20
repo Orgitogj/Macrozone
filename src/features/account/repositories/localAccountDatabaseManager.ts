@@ -1,3 +1,4 @@
+import { AccountDeletionPendingError } from '@/features/account/services/deletionBarrier';
 import { AccountScopeChangedError, GUEST_SCOPE, isSameScope, scopeKey, type AccountScope, type LocalAccountDatabaseManager } from '@/features/account/types';
 import { accountDatabaseName } from '@/features/account/utils/accountKey';
 import type { SqlDatabase, SqlExecutor } from '@/storage/database/types';
@@ -29,19 +30,30 @@ async function claimScope(database: SqlDatabase, scope: AccountScope): Promise<v
   }
 }
 
-function guard(database: ManagedDatabase, isCurrent: () => boolean, onWrite: () => void): SqlDatabase {
+function guard(
+  database: ManagedDatabase,
+  isCurrent: () => boolean,
+  onWrite: () => void,
+  isWriteBlocked: () => boolean,
+): SqlDatabase {
   const check = () => {
     if (!isCurrent()) {
       throw new AccountScopeChangedError();
     }
   };
+  const checkWrite = () => {
+    check();
+    if (isWriteBlocked()) {
+      throw new AccountDeletionPendingError();
+    }
+  };
   return {
     execAsync: async (source) => {
-      check();
+      checkWrite();
       return database.execAsync(source);
     },
     runAsync: async (source, params) => {
-      check();
+      checkWrite();
       const result = await database.runAsync(source, params);
       onWrite();
       return result;
@@ -55,9 +67,9 @@ function guard(database: ManagedDatabase, isCurrent: () => boolean, onWrite: () 
       return database.getAllAsync<T>(source, params);
     },
     withExclusiveTransactionAsync: async (task) => {
-      check();
+      checkWrite();
       await database.withExclusiveTransactionAsync(async (transaction) => {
-        check();
+        checkWrite();
         await task(transaction);
       });
       onWrite();
@@ -71,12 +83,14 @@ export function createLocalAccountDatabaseManager({
   deleteDatabase,
   onScopeReady,
   onAccountWrite,
+  isWriteBlocked = () => false,
 }: {
   open: DatabaseOpener;
   prepare: (database: SqlDatabase) => Promise<SqlDatabase>;
   deleteDatabase?: (fileName: string) => Promise<void>;
   onScopeReady?: (scope: AccountScope) => void;
   onAccountWrite?: () => void;
+  isWriteBlocked?: (scope: AccountScope) => boolean;
 }): LocalAccountDatabaseManager {
   let scope: AccountScope = GUEST_SCOPE;
   let epoch = 0;
@@ -112,6 +126,7 @@ export function createLocalAccountDatabaseManager({
           onAccountWrite?.();
         }
       },
+      () => scope.kind === 'account' && isWriteBlocked(scope),
     );
     active = { epoch: target, raw, guarded };
     onScopeReady?.(scope);
