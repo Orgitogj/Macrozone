@@ -1,6 +1,8 @@
 import { Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { logEnvironmentProblems } from '@/config/getEnvironmentReport';
 import { AppLoader } from '@/components/ui/AppLoader';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { AccountProvider, useAuthLinkHandler } from '@/features/account';
@@ -73,6 +75,10 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    logEnvironmentProblems();
+  }, []);
+
   return (
     <AppThemeProvider>
       <AccountProvider>
