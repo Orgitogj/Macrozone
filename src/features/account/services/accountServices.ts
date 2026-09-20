@@ -20,9 +20,12 @@ import {
 import {
   ACCOUNT_DELETION_MESSAGES,
   AccountDeletionError,
+  type AccountDeletionErrorCode,
   type AccountDeletionGateway,
 } from '@/features/account/repositories/supabaseAccountDeletionGateway';
+import type { DeletionBarrier, PendingDeletion } from '@/features/account/services/deletionBarrier';
 import { scopeKey, type AccountScope, type LocalAccountDatabaseManager } from '@/features/account/types';
+import { reportError } from '@/utils/reportError';
 import type { AuthService } from '@/features/auth/services/authService';
 import type { AuthErrorCode } from '@/features/auth/types';
 import type { ConnectivityProvider } from '@/features/sync/adapters/connectivityProvider';
@@ -70,6 +73,7 @@ export type AccountUiState = {
   summary: SyncPendingSummary | null;
   lastOutcome: SyncRunOutcome | null;
   link: AccountLinkState;
+  deletionPending: PendingDeletion | null;
 };
 
 export type SignOutOutcome = { status: 'ok' } | { status: 'partial'; message: string };
@@ -80,8 +84,19 @@ export type DeleteAccountOutcome =
   | { status: 'deleted'; mode: DeleteAccountMode; copied: AccountCopySummary | null; accountDataRemoved: boolean }
   | { status: 'partial'; mode: DeleteAccountMode; copied: AccountCopySummary | null; accountDataRemoved: boolean; message: string }
   | { status: 'copied_not_deleted'; copied: AccountCopySummary; message: string }
+  | { status: 'unconfirmed'; message: string }
   | { status: 'blocked'; message: string }
   | { status: 'failed'; message: string };
+
+const DEFINITIVE_DELETION_FAILURES: readonly AccountDeletionErrorCode[] = [
+  'reauthentication_failed',
+  'identity_mismatch',
+  'unsupported_account',
+  'not_configured',
+];
+
+const UNCONFIRMED_DELETION =
+  'MacroZone could not confirm whether your cloud account was deleted. Your data on this device is protected until you try again.';
 
 export type AuthLinkNavigation =
   | { status: 'none' }
@@ -108,6 +123,8 @@ export function createAccountServices({
   guestImport,
   accountCopy,
   accountDeletion,
+  deletionBarrier,
+  deriveKey,
   now = () => new Date(),
 }: {
   auth: AuthService;
@@ -124,6 +141,8 @@ export function createAccountServices({
   guestImport: GuestImportPort | null;
   accountCopy: AccountToGuestCopyService | null;
   accountDeletion: AccountDeletionGateway | null;
+  deletionBarrier: DeletionBarrier;
+  deriveKey?: (userId: string) => Promise<string>;
   now?: () => Date;
 }) {
   const listeners = new Set<() => void>();
@@ -140,6 +159,7 @@ export function createAccountServices({
     summary: null,
     lastOutcome: null,
     link: { status: 'idle' },
+    deletionPending: deletionBarrier.getPending(),
   };
 
   const notify = () => {
@@ -164,20 +184,24 @@ export function createAccountServices({
       if (store === active) {
         setState({ summary });
       }
-    } catch {
-      return;
+    } catch (error) {
+      reportError('account.summary', error);
     }
   };
 
   const refreshOnline = async (): Promise<void> => {
     try {
       setState({ online: await connectivity.isOnline() });
-    } catch {
-      return;
+    } catch (error) {
+      reportError('account.connectivity', error);
     }
   };
 
   const buildCoordinator = (scope: AccountScope): SyncCoordinator | null => {
+    if (scope.kind === 'account' && deletionBarrier.isBlocked(scope.accountKey)) {
+      store = null;
+      return null;
+    }
     const cloud = createCloud();
     const localStore = scope.kind === 'account' ? createLocalStore(scope) : null;
     if (cloud === null || localStore === null) {
@@ -207,6 +231,7 @@ export function createAccountServices({
     metadataStore,
     createCoordinator: buildCoordinator,
     createTriggers: (coordinator) => createSyncTriggers({ coordinator, connectivity, appState, localChanges }),
+    deriveKey,
     guestImport: guestImport ?? undefined,
     onStateChange: (next) => {
       if (next.status !== 'signed_in') {
@@ -222,6 +247,10 @@ export function createAccountServices({
       });
       void refreshSummary();
     },
+  });
+
+  deletionBarrier.subscribe(() => {
+    setState({ deletionPending: deletionBarrier.getPending() });
   });
 
   const requireStore = (): LocalSyncStore => {
@@ -249,10 +278,15 @@ export function createAccountServices({
     if (accountDeletion === null) {
       return { status: 'failed', message: ACCOUNT_DELETION_MESSAGES.not_configured };
     }
+    const pending = deletionBarrier.getPending();
+    if (pending !== null && pending.accountKey !== scope.accountKey) {
+      return { status: 'blocked', message: 'Another account on this device is waiting for deletion to finish.' };
+    }
+    const effectiveMode = pending?.mode ?? mode;
     session.stopSync();
 
     let copied: AccountCopySummary | null = null;
-    if (mode === 'copy_to_guest') {
+    if (effectiveMode === 'copy_to_guest') {
       if (accountCopy === null) {
         return {
           status: 'blocked',
@@ -271,14 +305,58 @@ export function createAccountServices({
       if (activeScope.kind !== 'account' || activeScope.accountKey !== scope.accountKey) {
         return { status: 'blocked', message: 'The signed-in account changed while copying, so nothing was deleted.' };
       }
+      const expected = pending?.fingerprint ?? copied.sourceFingerprint;
+      await deletionBarrier.engage({
+        accountKey: scope.accountKey,
+        mode: 'copy_to_guest',
+        stage: 'copied',
+        fingerprint: expected,
+        copiedAt: pending?.copiedAt ?? now().toISOString(),
+      });
+      let current: string;
+      try {
+        current = await accountCopy.fingerprintAccountData();
+      } catch {
+        return { status: 'blocked', message: 'MacroZone could not check the copy on this device, so nothing was deleted.' };
+      }
+      if (current !== expected) {
+        return {
+          status: 'blocked',
+          message:
+            'This account changed after the copy was made, so nothing was deleted. Copy the data to this device again before deleting.',
+        };
+      }
+    } else {
+      await deletionBarrier.engage({
+        accountKey: scope.accountKey,
+        mode: 'remove',
+        stage: 'deleting',
+        fingerprint: null,
+        copiedAt: null,
+      });
     }
+
+    await deletionBarrier.update({ stage: 'deleting' });
 
     try {
       await accountDeletion.deleteAccount({ password });
     } catch (error) {
+      const code = error instanceof AccountDeletionError ? error.code : 'unexpected';
       const message = error instanceof AccountDeletionError ? error.message : ACCOUNT_DELETION_MESSAGES.unexpected;
-      return copied === null ? { status: 'failed', message } : { status: 'copied_not_deleted', copied, message };
+      const definitive = DEFINITIVE_DELETION_FAILURES.includes(code);
+      await deletionBarrier.countAttempt(code);
+      await deletionBarrier.update({ stage: definitive ? 'copied' : 'unconfirmed' });
+      if (copied !== null) {
+        return { status: 'copied_not_deleted', copied, message: definitive ? message : `${message} ${UNCONFIRMED_DELETION}` };
+      }
+      if (definitive) {
+        await deletionBarrier.clear();
+        return { status: 'failed', message };
+      }
+      return { status: 'unconfirmed', message: `${message} ${UNCONFIRMED_DELETION}` };
     }
+
+    await deletionBarrier.clear();
 
     const problems: string[] = [];
     const signedOut = await auth.signOut();
@@ -311,8 +389,8 @@ export function createAccountServices({
     }
 
     return problems.length === 0
-      ? { status: 'deleted', mode, copied, accountDataRemoved }
-      : { status: 'partial', mode, copied, accountDataRemoved, message: problems.join(' ') };
+      ? { status: 'deleted', mode: effectiveMode, copied, accountDataRemoved }
+      : { status: 'partial', mode: effectiveMode, copied, accountDataRemoved, message: problems.join(' ') };
   };
 
   let linkInFlight: Promise<AuthLinkNavigation> | null = null;
@@ -354,6 +432,7 @@ export function createAccountServices({
 
     initialize: async (): Promise<void> => {
       if (subscribed) {
+        await deletionBarrier.load();
         await session.restore();
         await refreshSummary();
         await refreshOnline();
@@ -378,6 +457,7 @@ export function createAccountServices({
       connectivity.subscribe((online) => {
         setState({ online });
       });
+      await deletionBarrier.load();
       await session.restore();
       await refreshSummary();
       await refreshOnline();
@@ -419,6 +499,13 @@ export function createAccountServices({
     },
 
     signInWithPassword: async (input: { email: string; password: string }) => {
+      if (deletionBarrier.isBlocked()) {
+        return {
+          status: 'failed' as const,
+          code: 'unexpected' as const,
+          message: 'Finish or cancel the account deletion waiting on this device before signing in to another account.',
+        };
+      }
       const result = await auth.signIn(input);
       if (result.status === 'ok') {
         await session.signInWithSession(result.value);
@@ -428,6 +515,12 @@ export function createAccountServices({
     },
 
     signOut: async (): Promise<SignOutOutcome> => {
+      if (deletionBarrier.isBlocked()) {
+        return {
+          status: 'partial',
+          message: 'This account is waiting for deletion to finish. Finish or cancel the deletion before signing out.',
+        };
+      }
       session.stopSync();
       const problems: string[] = [];
       const signedOut = await auth.signOut();
@@ -486,6 +579,15 @@ export function createAccountServices({
       });
       linkInFlight = pending;
       return pending;
+    },
+
+    cancelPendingDeletion: async (): Promise<void> => {
+      if (!deletionBarrier.isBlocked()) {
+        return;
+      }
+      await deletionBarrier.clear();
+      await session.restore();
+      await refreshSummary();
     },
 
     clearLinkState: (): void => {

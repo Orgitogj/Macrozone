@@ -9,6 +9,7 @@ import { createAccountServices, type AccountServices } from '@/features/account/
 import { createAccountToGuestCopyService } from '@/features/account/services/accountToGuestCopyService';
 import { createGuestImportService } from '@/features/account/services/guestImportService';
 import { createSupabaseAccountDeletionGateway } from '@/features/account/repositories/supabaseAccountDeletionGateway';
+import { getDeletionBarrier } from '@/features/account/services/getDeletionBarrier';
 import { getSupabaseClient, getSupabaseConfig } from '@/features/auth/adapters/getSupabaseClient';
 import { describeSupabaseConfig } from '@/features/auth/config/supabaseConfig';
 import { createNotConfiguredAuthRepository } from '@/features/auth/repositories/notConfiguredAuthRepository';
@@ -85,6 +86,7 @@ export function getAccountServices(): AccountServices {
         return scope.kind === 'account' ? scope.accountKey : null;
       },
     }),
+    deletionBarrier: getDeletionBarrier(),
     accountDeletion:
       config.status === 'ready'
         ? createSupabaseAccountDeletionGateway({
