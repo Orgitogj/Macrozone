@@ -1,20 +1,54 @@
 export type VerifiedUser = { id: string; email: string | null };
 
+export type RateLimitDecision = { allowed: boolean; retryAfterSeconds: number };
+
+export type RateLimiter = { check(key: string): RateLimitDecision };
+
 export type DeleteAccountDeps = {
   verifyAccessToken(accessToken: string): Promise<VerifiedUser | null>;
   verifyPassword(input: { email: string; password: string }): Promise<VerifiedUser | null>;
   deleteAccountData(userId: string): Promise<{ status: 'deleted' | 'already_deleted' }>;
   revokeChallengeSession?(): Promise<void>;
+  rateLimiter?: RateLimiter;
   log?(entry: { event: string; outcome: string }): void;
 };
 
 export const MAX_PASSWORD_LENGTH = 72;
 
+export const MAX_BODY_BYTES = 4096;
+
+export function createMemoryRateLimiter({
+  limit = 5,
+  windowMs = 15 * 60_000,
+  now = () => Date.now(),
+}: { limit?: number; windowMs?: number; now?: () => number } = {}): RateLimiter {
+  const attempts = new Map<string, number[]>();
+  return {
+    check: (key) => {
+      const current = now();
+      const recent = (attempts.get(key) ?? []).filter((stamp) => current - stamp < windowMs);
+      if (recent.length >= limit) {
+        const oldest = recent[0];
+        return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((windowMs - (current - oldest)) / 1000)) };
+      }
+      recent.push(current);
+      attempts.set(key, recent);
+      return { allowed: true, retryAfterSeconds: 0 };
+    },
+  };
+}
+
 const JSON_HEADERS = { 'content-type': 'application/json' } as const;
 
-function respond(status: number, body: Record<string, unknown>, deps: DeleteAccountDeps, outcome: string): Response {
+function respond(
+  status: number,
+  body: Record<string, unknown>,
+  deps: DeleteAccountDeps,
+  outcome: string,
+  headers: Record<string, string> = {},
+): Response {
   deps.log?.({ event: 'delete_account', outcome });
-  return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
+  return new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS, ...headers } });
 }
 
 function bearerToken(request: Request): string | null {
@@ -30,7 +64,11 @@ function bearerToken(request: Request): string | null {
 async function readPassword(request: Request): Promise<string | null> {
   let parsed: unknown;
   try {
-    parsed = await request.json();
+    const body = await request.text();
+    if (body.length > MAX_BODY_BYTES) {
+      return null;
+    }
+    parsed = JSON.parse(body);
   } catch {
     return null;
   }
@@ -47,6 +85,16 @@ async function readPassword(request: Request): Promise<string | null> {
 export async function handleDeleteAccount(request: Request, deps: DeleteAccountDeps): Promise<Response> {
   if (request.method !== 'POST') {
     return respond(405, { error: 'method_not_allowed' }, deps, 'method_not_allowed');
+  }
+
+  const contentType = request.headers.get('content-type') ?? '';
+  if (contentType !== '' && !contentType.toLowerCase().includes('application/json')) {
+    return respond(415, { error: 'unsupported_media_type' }, deps, 'unsupported_media_type');
+  }
+
+  const declaredLength = Number(request.headers.get('content-length') ?? '0');
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    return respond(413, { error: 'payload_too_large' }, deps, 'payload_too_large');
   }
 
   const accessToken = bearerToken(request);
@@ -70,6 +118,13 @@ export async function handleDeleteAccount(request: Request, deps: DeleteAccountD
   }
   if (caller.email === null || caller.email.length === 0) {
     return respond(400, { error: 'unsupported_account' }, deps, 'no_email');
+  }
+
+  const decision = deps.rateLimiter?.check(caller.id);
+  if (decision !== undefined && !decision.allowed) {
+    return respond(429, { error: 'rate_limited' }, deps, 'rate_limited', {
+      'retry-after': String(decision.retryAfterSeconds),
+    });
   }
 
   let reauthenticated: VerifiedUser | null;

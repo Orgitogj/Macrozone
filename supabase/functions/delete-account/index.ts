@@ -1,4 +1,4 @@
-import { handleDeleteAccount, type VerifiedUser } from './handler.ts';
+import { createMemoryRateLimiter, handleDeleteAccount, type VerifiedUser } from './handler.ts';
 
 declare const Deno: {
   env: { get(key: string): string | undefined };
@@ -20,6 +20,8 @@ function userFrom(payload: unknown): VerifiedUser | null {
   const { id, email } = user as { id?: unknown; email?: unknown };
   return typeof id === 'string' && id.length > 0 ? { id, email: typeof email === 'string' ? email : null } : null;
 }
+
+const rateLimiter = createMemoryRateLimiter();
 
 Deno.serve(async (request: Request) => {
   let challengeToken: string | null = null;
@@ -73,6 +75,8 @@ Deno.serve(async (request: Request) => {
       });
       challengeToken = null;
     },
+
+    rateLimiter,
 
     log: (entry) => {
       console.log(JSON.stringify(entry));
