@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { useAccountSession } from '@/features/account/hooks/useAccountSession';
 import { getAccountServices } from '@/features/account/services/getAccountServices';
 import { layout, useTheme } from '@/theme';
+import { reportError } from '@/utils/reportError';
 
 const PREPARE_FAILED =
   'MacroZone could not prepare your data on this device. Try again, or restart the app if this keeps happening.';
@@ -19,7 +20,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    void services.initialize().catch(() => {
+    void services.initialize().catch((failure: unknown) => {
+      reportError('account.initialize', failure);
       if (!cancelled) {
         setError(PREPARE_FAILED);
       }
