@@ -1012,6 +1012,10 @@ Business logic is implemented as pure functions and unit-tested with Jest (`npm 
 - Account sync covers meals (with their source snapshots), foods and their barcode links, saved meals, recipes, and the nutrition plan. Theme preference, reminders, the online product cache, legacy recovery records, and AI preferences stay on the device.
 - On web, one browser tab writes at a time through a serial queue and compensating writes, but separate tabs are not coordinated: two tabs writing at the same moment can still interleave, because browser storage offers no cross-tab transaction. Use one tab at a time for the same account.
 - Sync has been verified with automated tests, a fake cloud that mirrors the SQL contract, and the SQL itself in PGlite. The `delete-account` Edge Function's logic has been tested with GoTrue and PostgREST replaced by fakes. None of it has been run against a live Supabase project, in the Supabase Edge runtime, or on devices.
+- The bundle identifiers (`com.macrozone.app`) are placeholders chosen for this repository; change them before the first store submission if you publish under a different domain.
+- There is no crash or error reporting service. `reportError` logs to the console in development and forwards to a sink that nothing registers by default, so production builds stay silent until a sink is added.
+- No analytics are collected, so there are no usage metrics to fall back on when diagnosing a report from a user.
+- `PRIVACY.md` is a working document with placeholders, not a published privacy policy.
 - `npm audit` reports advisories in transitive Expo CLI and build-tooling dependencies. npm's only suggested fix is an Expo major-version upgrade, so these are tracked rather than force-fixed.
 
 ## Roadmap
@@ -1031,5 +1035,8 @@ Work proceeds one phase at a time:
 10. **Accounts and optional cloud sync:** optional accounts, secure cloud backup, and offline-first synchronization with Supabase, with local-only use preserved.
 11. **Progress tracking:** weight, body measurements, trends, charts.
 12. **Advanced features:** evaluated and delivered as separate projects (health platform integrations and so on).
+
+See [PRIVACY.md](PRIVACY.md) for what is stored on the device, what is synced, what leaves the device and what account
+deletion removes.
 
 Nutrition values and future goal calculations are estimates and are not medical advice.
